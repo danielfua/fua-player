@@ -15,6 +15,7 @@ $launcherOutput=Join-Path $app 'FuaPlayer.exe'
 $icon=Join-Path $app 'fua-player-v2.ico'
 & $compiler /nologo /target:winexe /platform:x64 /reference:System.Windows.Forms.dll "/win32icon:$icon" "/out:$launcherOutput" $launcherSource
 if($LASTEXITCODE -ne 0){throw 'Falha ao compilar o inicializador'}
+Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $payload=Join-Path $dist 'fua-payload.zip'
 if(Test-Path -LiteralPath $payload){Remove-Item -LiteralPath $payload}
