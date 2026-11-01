@@ -1,0 +1,23 @@
+name: Build Windows
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verified dependencies
+        shell: powershell
+        run: ./scripts/get-dependencies.ps1
+      - name: Backup and restore tests
+        shell: powershell
+        run: ./app/node.exe ./tests/backup.test.cjs
+      - name: Build installer
+        shell: powershell
+        run: ./scripts/build-release.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FuaPlayer-Windows-x64
+          path: dist/FuaPlayer-Setup-*.exe

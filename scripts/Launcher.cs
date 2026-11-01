@@ -1,0 +1,4 @@
+using System;using System.IO;using System.Diagnostics;using System.Windows.Forms;
+class Launcher {
+ [STAThread]static int Main(){try{string root=AppDomain.CurrentDomain.BaseDirectory;var start=new ProcessStartInfo(Path.Combine(root,"node.exe"),"\""+Path.Combine(root,"native-launcher.cjs")+"\""){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true,WorkingDirectory=root};using(var process=Process.Start(start)){string output=process.StandardOutput.ReadToEnd();string error=process.StandardError.ReadToEnd();process.WaitForExit();if(process.ExitCode!=0)throw new Exception(string.IsNullOrWhiteSpace(error)?"Não foi possível iniciar o Fua Player.":error);return 0;}}catch(Exception ex){MessageBox.Show(ex.Message,"Fua Player",MessageBoxButtons.OK,MessageBoxIcon.Error);return 1;}}
+}

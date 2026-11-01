@@ -1,0 +1,26 @@
+[
+  {
+    "id": "node",
+    "url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-win-x64.zip",
+    "file": "node.zip",
+    "sha256": "d2046d28c2c3dcd211ac5145c0bf30e2047ef9dfb306693c8c6e2eccd8b95fa5"
+  },
+  {
+    "id": "webview",
+    "url": "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.4314.35/microsoft.web.webview2.1.0.4314.35.nupkg",
+    "file": "webview.nupkg",
+    "sha256": "90778deb1b77e36292828b4b5833c9255c27533f40e0ddd55891ae718944edc4"
+  },
+  {
+    "id": "mediainfo",
+    "url": "https://mediaarea.net/download/binary/libmediainfo0/26.05/MediaInfo_DLL_26.05_Windows_x64_WithoutInstaller.7z",
+    "file": "mediainfo.7z",
+    "sha256": "3c8b9729c886ebc60214c29d8d2d93c59c13b2b80d7f0accf7a019be7a1b3a1b"
+  },
+  {
+    "id": "mpv",
+    "url": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261101/mpv-dev-x86_64-20261101-git-48fca90e8c.7z",
+    "file": "mpv.7z",
+    "sha256": "30d3f9fa121ce24638610a9ae52f8957743f9dea416dd37dc4ff7e43589ef843"
+  }
+]

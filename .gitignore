@@ -1,0 +1,22 @@
+/private-migration/
+/dist/
+/test-install/
+/test-data/
+/app/data/
+/app/node.exe
+**/runtime/
+**/*.exe
+**/*.dll
+**/*.log
+**/*-secret.json
+**/webview-profile*/
+**/keyboard-shortcuts.json
+**/player-settings.json
+**/library-metadata.json
+**/library-enrichment.json
+**/sync-backups/
+**/*.fua-backup.json
+
+/.deps/
+
+/Fua Player - Instalador e backup/
