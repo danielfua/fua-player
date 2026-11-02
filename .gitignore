@@ -18,5 +18,10 @@
 **/*.fua-backup.json
 
 /.deps/
+/app/preview-test.png
+/app/fua-native/test-frame.png*
+/tests/check-thumbnails.tmp.cjs
 
 /Fua Player - Instalador e backup/
+
+/snapshots/

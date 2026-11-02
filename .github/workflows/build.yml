@@ -3,21 +3,47 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   windows:
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Verified dependencies
         shell: powershell
         run: ./scripts/get-dependencies.ps1
-      - name: Backup and restore tests
+      - name: Source audit and backup tests
         shell: powershell
-        run: ./app/node.exe ./tests/backup.test.cjs
+        run: |
+          ./app/node.exe ./tests/audit-source.cjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          ./app/node.exe ./tests/backup.test.cjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
       - name: Build installer
         shell: powershell
-        run: ./scripts/build-release.ps1
+        run: |
+          ./scripts/build-release.ps1
+          Get-ChildItem dist/FuaPlayer-Setup-*.exe | ForEach-Object { $hash=Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName; ($hash.Hash.ToLowerInvariant()+'  '+$_.Name) | Set-Content -Encoding ascii ($_.FullName+'.sha256') }
       - uses: actions/upload-artifact@v4
         with:
           name: FuaPlayer-Windows-x64
-          path: dist/FuaPlayer-Setup-*.exe
+          path: |
+            dist/FuaPlayer-Setup-*.exe
+            dist/*.sha256
+      - name: Publish versioned release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version=(Get-Content -Raw VERSION).Trim()
+          $tag='v'+$version
+          gh release view $tag --repo $env:GITHUB_REPOSITORY 2>$null
+          if($LASTEXITCODE -ne 0){
+            gh release create $tag --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Fua Player $version" --notes-file CHANGELOG.md "dist/FuaPlayer-Setup-$version.exe" "dist/FuaPlayer-Setup-$version.exe.sha256"
+            if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          }
+          exit 0

@@ -14,3 +14,5 @@ foreach($name in @('Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.Win
 Copy-Item -LiteralPath (Join-Path $cache 'webview/runtimes/win-x64/native/WebView2Loader.dll') -Destination (Join-Path $app 'fua-native/WebView2Loader.dll') -Force
 Copy-Item (Join-Path $root 'licenses/*') (Join-Path $app 'licenses') -Force
 Write-Output 'Dependências verificadas e prontas.'
+
+Copy-Item -LiteralPath (Join-Path $cache 'mpv-extractor/mpv.exe') -Destination (Join-Path $app 'fua-native/runtime/mpv.exe') -Force

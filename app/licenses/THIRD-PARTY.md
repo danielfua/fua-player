@@ -9,3 +9,7 @@ O código específico do Fua Player é disponibilizado sob GPL-3.0-or-later. Os 
 * **Free My TV**: origem conceitual do projeto inicial; preservamos os créditos MIT em `FreeMyTV-MIT.txt`. O aplicativo Windows não depende do aplicativo Android. Origem: https://github.com/simbasjungles/free-my-tv.
 
 As imagens, fotografias, logotipos e dados de filmes/séries obtidos de TMDB e OMDb pertencem aos respectivos titulares. Não fazem parte do código-fonte nem são distribuídos no catálogo público. Cada instalação usa suas próprias chaves e deve observar os termos desses serviços. Este produto usa a API do TMDB, mas não é endossado nem certificado pelo TMDB.
+
+* **Thumbfast**: MPL-2.0. Fonte: https://github.com/po5/thumbfast. Adaptações de integração, dimensões e caminhos estão no arquivo distribuído `fua-native/thumbfast.lua`. Texto completo em `Thumbfast-MPL-2.0.txt`.
+* **Anime4K**: copyright bloc97 e colaboradores, MIT. Seis perfis GLSL locais v4.0, com licença integral preservada em cada arquivo. Fonte: https://github.com/bloc97/Anime4K. SRGAN e FSRCNNX não são incluídos.
+* **mpv para Thumbfast**: Windows x64 de 2026-11-01, commit `48fca90e8c`, GPL. Fonte: https://github.com/mpv-player/mpv/tree/48fca90e8c. Receitas: https://github.com/shinchiro/mpv-winbuild-cmake. Pacote e SHA-256 em `dependencies.lock.json` e identificação do executável em `fua-native/thumbnail-runtime-source.json`.

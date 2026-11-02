@@ -14,9 +14,14 @@ Player de mídia para Windows x64, com biblioteca de filmes e séries, reproduç
 * RTX Video HDR para fontes SDR quando GPU, driver e tela forem compatíveis; conteúdo HDR nativo segue o caminho HDR do motor. O recurso depende do hardware e das configurações do Windows.
 * Backup/restauração de preferências, atalhos, catálogo e progresso; cópia automática diária. As chaves de API só entram em backups quando a opção correspondente é marcada.
 
+* Anime4K em tempo real: A, A+A, B, B+B, C e C+A, com seletor e opção Desligado.
+* Miniaturas por Thumbfast e retomada para arquivos abertos diretamente no player.
+
 ## Instalar
 
-Execute o instalador gerado em `dist/FuaPlayer-Setup-1.0.0.exe`. Ele instala para o usuário atual, sem precisar de administrador, e cria o atalho **Fua Player**. Node.js, libmpv e MediaInfo acompanham o pacote; não é necessário ter Codex, mpv.net, MPC-HC ou outro player instalado.
+Baixe o [instalador da versão 2.0.0](https://github.com/danielfua/fua-player/releases/tag/v2.0.0).
+
+Para compilações locais, execute o instalador gerado em `dist/FuaPlayer-Setup-2.0.0.exe`. Ele instala para o usuário atual, sem precisar de administrador, e cria o atalho **Fua Player**. Node.js, libmpv e MediaInfo acompanham o pacote; não é necessário ter Codex, mpv.net, MPC-HC ou outro player instalado.
 
 Pré-requisitos do sistema: Windows 10/11 x64, .NET Framework 4.8 e [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). A instalação do Runtime é separada quando ele ainda não está disponível no Windows.
 
@@ -49,3 +54,13 @@ Espaço: play/pause; setas: avanço/volume; F ou F11: tela cheia; A: menu de áu
 ## Licença e créditos
 
 GPL-3.0-or-later para o código do Fua Player. Consulte `LICENSE` e `licenses/THIRD-PARTY.md` para componentes de terceiros e respectivas origens. Cada serviço de metadados tem seus próprios termos. Este produto usa a API do TMDB, mas não é endossado nem certificado pelo TMDB.
+
+## Prévia e vídeos externos
+
+Abra um vídeo pelo Explorador com o FuaPlayer.exe principal para reproduzir sem passar pela biblioteca. Ao abrir novamente o mesmo arquivo, o player retoma a posição guardada automaticamente. O histórico fica em `data/external-history`, separado do cache de imagens e incluído nos backups. Arquivos alterados são tratados como uma nova mídia.
+
+A prévia da barra usa Thumbfast com um mpv próprio, sem depender do mpv.net instalado. O extrator fica aberto durante a navegação e encerra após inatividade. Usa apenas uma imagem temporária, preserva a interpretação HDR no overlay e descarta as prévias ao fechar. Configure resolução e inatividade em **Engrenagem → Prévia e histórico**. O limite de mídias vale para as capas locais; o histórico de retomada continua separado.
+
+## Anime4K
+
+Clique em **A4K** ao lado da velocidade. O perfil ativo aparece em azul e a versão consta no menu. Inicia desligado e não altera o vídeo. A fluidez depende da GPU, resolução e perfil. SRGAN não incluído.

@@ -1,0 +1,7 @@
+{
+  "name": "mpv Windows x64 2026-11-01 git-48fca90e8c",
+  "source": "https://github.com/mpv-player/mpv/tree/48fca90e8c",
+  "archive": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261101/mpv-x86_64-20261101-git-48fca90e8c.7z",
+  "archiveSha256": "7a887a10b74c1a4a7e8c29ead8300cfc610c466c4686bf9dcb92ca2f224ba110",
+  "executableSha256": "ea94e743e49a1b88ee34b4a40b1e5f0f6e4d1225e10e69f03da0a3c5452c1488"
+}

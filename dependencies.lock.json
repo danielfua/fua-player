@@ -22,5 +22,11 @@
     "url": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261101/mpv-dev-x86_64-20261101-git-48fca90e8c.7z",
     "file": "mpv.7z",
     "sha256": "30d3f9fa121ce24638610a9ae52f8957743f9dea416dd37dc4ff7e43589ef843"
+  },
+  {
+    "id": "mpv-extractor",
+    "url": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261101/mpv-x86_64-20261101-git-48fca90e8c.7z",
+    "file": "mpv-extractor.7z",
+    "sha256": "7a887a10b74c1a4a7e8c29ead8300cfc610c466c4686bf9dcb92ca2f224ba110"
   }
 ]
