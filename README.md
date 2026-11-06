@@ -12,26 +12,17 @@ Player de mídia para Windows x64, com biblioteca de filmes e séries, reproduç
 * Áudio e legendas com listas roláveis; legendas ASS/SSA, SRT e PGS suportadas pelo motor.
 * Atalhos editáveis, ajustes de imagem, informações de reprodução em páginas e retorno à biblioteca ao terminar.
 * RTX Video HDR para fontes SDR quando GPU, driver e tela forem compatíveis; conteúdo HDR nativo segue o caminho HDR do motor. O recurso depende do hardware e das configurações do Windows.
-* Backup/restauração de preferências, atalhos, catálogo e progresso; cópia automática diária. As chaves de API só entram em backups quando a opção correspondente é marcada.
 
 * Anime4K em tempo real: A, A+A, B, B+B, C e C+A, com seletor e opção Desligado.
 * Miniaturas por Thumbfast e retomada para arquivos abertos diretamente no player.
 
-## Instalar
+## Usar a versão portátil
 
-Baixe o [instalador da versão 2.0.0](https://github.com/danielfua/fua-player/releases/tag/v2.0.0).
-
-Para compilações locais, execute o instalador gerado em `dist/FuaPlayer-Setup-2.0.0.exe`. Ele instala para o usuário atual, sem precisar de administrador, e cria o atalho **Fua Player**. Node.js, libmpv e MediaInfo acompanham o pacote; não é necessário ter Codex, mpv.net, MPC-HC ou outro player instalado.
+Baixe o ZIP em [Releases](https://github.com/danielfua/fua-player/releases), extraia para uma pasta com permissão de gravação e abra **FuaPlayer.exe**. Node.js, libmpv e MediaInfo acompanham o pacote.
 
 Pré-requisitos do sistema: Windows 10/11 x64, .NET Framework 4.8 e [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). A instalação do Runtime é separada quando ele ainda não está disponível no Windows.
 
 Na engrenagem da biblioteca, adicione as pastas de filmes/séries e configure sua própria chave [TMDB](https://www.themoviedb.org/settings/api). A chave [OMDb](https://www.omdbapi.com/apikey.aspx) é opcional para as notas disponíveis no serviço. O catálogo público não contém mídias, chaves, títulos pessoais nem histórico de reprodução.
-
-## Backup e restauração
-
-Engrenagem → **Backup e restauração** → **Criar backup**. O arquivo `.fua-backup.json` pode ser guardado fora do computador. **Restaurar backup** cria uma cópia de segurança antes de aplicar os dados. Os vídeos não entram no backup.
-
-Preferências e cache ficam na subpasta `data` da instalação; backups automáticos ficam em `data/backups`. O progresso compatível com Nova também usa arquivos laterais nas pastas dos vídeos. Para outro computador, configure as novas pastas e confira os caminhos ao restaurar. Backups que incluem chaves devem ser tratados como arquivos privados.
 
 ## Compilar
 

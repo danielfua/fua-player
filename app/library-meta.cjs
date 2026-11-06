@@ -13,6 +13,41 @@ function key(){return JSON.parse(fs.readFileSync(config.file('tmdb-secret.json')
 async function tmdb(route,params={}){const u=new URL('https://api.themoviedb.org/3/'+route);for(const[k,v]of Object.entries({api_key:key(),language:'pt-BR',include_adult:'false',...params}))u.searchParams.set(k,v);const r=await fetch(u,{signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error('TMDB temporariamente indisponível');return r.json()}
 function pickLogo(logos){const priority={pt:0,en:1};const list=logos.filter(x=>x.file_path&&x.width>=200).sort((a,b)=>(priority[a.iso_639_1]??2)-(priority[b.iso_639_1]??2)||(b.vote_average||0)-(a.vote_average||0)||(b.width||0)-(a.width||0));return list[0]?'https://image.tmdb.org/t/p/original'+list[0].file_path:null}
 function metadata(d,type){return {tmdb:d.id,title:d.title||d.name,year:(d.release_date||d.first_air_date||'').slice(0,4),synopsis:d.overview||'',logo:pickLogo(d.images?.logos||[]),poster:d.poster_path?'https://image.tmdb.org/t/p/w780'+d.poster_path:null,backdrop:d.backdrop_path?'https://image.tmdb.org/t/p/original'+d.backdrop_path:null,rating:d.vote_average||0,genres:(d.genres||[]).map(g=>g.name),runtime:d.runtime||null}}
+let trendingCache;
+let trendingRequest;
+async function trending() {
+ const credential = key();
+ if (!credential) throw Error('Configure sua chave do TMDB para ver os títulos em alta.');
+ if (trendingCache?.credential === credential && trendingCache.expires > Date.now())
+  return trendingCache.titles;
+ if (trendingRequest?.credential === credential) return trendingRequest.promise;
+
+ const promise = (async () => {
+  const data = await tmdb('trending/all/week');
+  const candidates = data.results.filter(item => !item.adult &&
+   ['movie','tv'].includes(item.media_type)).slice(0,12);
+  const enrich = require('./library-enrich.cjs');
+  const hasOmdb = fs.existsSync(config.file('omdb-secret.json'));
+  const titles = [];
+  for (let i = 0; i < candidates.length; i += 4) {
+   const batch = await Promise.all(candidates.slice(i,i+4).map(async item => {
+    const type = item.media_type;
+    const detail = await tmdb(type+'/'+item.id,{
+     append_to_response:'images,external_ids',include_image_language:'pt,en,null'
+    }).catch(() => ({}));
+    const result = metadata({...item,...detail,overview:detail.overview||item.overview},type);
+    const ratings = hasOmdb ? await enrich.omdb(detail.imdb_id || detail.external_ids?.imdb_id) : null;
+    return {...result,type,key:type+'-'+item.id,items:[],ratings};
+   }));
+   titles.push(...batch);
+  }
+  trendingCache = {credential,titles,expires:Date.now()+30*60*1000};
+  return titles;
+ })();
+ trendingRequest = {credential,promise};
+ try { return await promise; }
+ finally { if (trendingRequest?.promise === promise) trendingRequest = null; }
+}
 function score(d,g){const a=fold(g.title).split(' ').filter(s=>s.length>1),b=fold((d.title||d.name||'')+' '+(d.original_title||d.original_name||'')),matched=a.filter(w=>b.includes(w)).length;return matched/Math.max(a.length,1)+(g.year&&(d.release_date||d.first_air_date||'').startsWith(g.year)?.5:0)}
 function save(){fs.writeFileSync(file,JSON.stringify(cache))}
 async function scan(force=false){if(job.running)return;const candidates=groups().filter(g=>g.type!=='video'&&(force&&!cache[g.key]?.manual||!cache[g.key]));job={running:true,done:0,total:candidates.length,error:null};let cursor=0;async function worker(){while(cursor<candidates.length){const g=candidates[cursor++];try{const data=await tmdb('search/'+g.type,{query:g.title});const results=(data.results||[]).sort((a,b)=>score(b,g)-score(a,g));const best=results[0];if(best&&score(best,g)>=.65){const d=await tmdb(g.type+'/'+best.id,{append_to_response:'images',include_image_language:'pt,en,null'});cache[g.key]={metadata:metadata(d,g.type),checked:Date.now()}}else cache[g.key]={metadata:null,checked:Date.now()};save()}catch{job.error='Alguns títulos ficaram sem identificação. Você pode tentar novamente.'}job.done++}}try{await Promise.all([worker(),worker(),worker()])}finally{try{await exports.enrich(force)}catch{}job.running=false}}
@@ -20,6 +55,22 @@ exports.enrich=async(force=false)=>require('./library-enrich.cjs').refreshMetada
 exports.parse=parse;exports.groups=groups;
 exports.api=async(req,res,url)=>{if(!url.pathname.startsWith('/api/shelf/'))return false;const reply=(code,d)=>{res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(d))};if(req.headers.host!==(process.env.FUA_ENGINE==='native'?'127.0.0.1:'+(process.env.FUA_PORT||'8768'):'127.0.0.1:8767')){reply(403,{error:'Origem não autorizada'});return true}try{
  if(url.pathname==='/api/shelf/library'&&req.method==='GET'){reply(200,{titles:groups(),job});return true}
+ const ratingRoute=url.pathname.match(/^\/api\/shelf\/ratings\/(movie|tv)\/(\d{1,12})$/);
+ if(ratingRoute&&req.method==='GET'){
+  const [,type,id]=ratingRoute;
+  const enrich=require('./library-enrich.cjs');
+  const local=groups().find(g=>g.type===type&&String(g.tmdb)===id);
+  const stored=local&&enrich.title(local.key)?.ratings;
+  if(stored?.imdb&&stored?.rotten){reply(200,stored);return true;}
+  if(!fs.existsSync(config.file('omdb-secret.json'))){reply(200,stored||{});return true;}
+  const ids=await tmdb(type+'/'+id+'/external_ids');
+  reply(200,{...stored,...await enrich.omdb(ids.imdb_id)});
+  return true;
+ }
+ if(url.pathname==='/api/shelf/trending'&&req.method==='GET'){
+  try { key(); } catch { reply(400,{error:'Configure sua chave do TMDB para ver os títulos em alta.'});return true; }
+  reply(200,{titles:await trending()});return true;
+ }
  if(url.pathname==='/api/shelf/scan'&&req.method==='POST'){if(!['http://127.0.0.1:8767','http://127.0.0.1:8768','http://127.0.0.1:8769','http://127.0.0.1:8780'].includes(req.headers.origin)){reply(403,{error:'Origem não autorizada'});return true}scan(url.searchParams.get('retry')==='1').catch(()=>{});reply(202,{started:true});return true}
  const match=url.pathname.match(/^\/api\/shelf\/([a-f0-9]{16})\/season\/(\d{1,2})$/);if(match&&req.method==='GET'){const g=groups().find(g=>g.key===match[1]);if(!g||g.type!=='tv'||!g.tmdb){reply(200,{episodes:[]});return true}const d=await tmdb('tv/'+g.tmdb+'/season/'+Number(match[2]));reply(200,{episodes:(d.episodes||[]).map(e=>({episode:e.episode_number,title:e.name,synopsis:e.overview,runtime:e.runtime,still:e.still_path?'https://image.tmdb.org/t/p/w780'+e.still_path:null}))});return true}
  const detail=url.pathname.match(/^\/api\/shelf\/([a-f0-9]{16})\/extra$/);if(detail&&req.method==='GET'){reply(200,require('./library-enrich.cjs').title(detail[1])||{});return true}

@@ -10,9 +10,100 @@ function toast(message){$('toast').textContent=message;$('toast').hidden=false;c
 function episodeAction(item){return item.watched?'↻ Assistir novamente':item.position?'▶ Continuar · '+time(item.position):'▶ Assistir'}
 function label(item){return item.watched?'Assistido':item.position?'Retomar em '+time(item.position):'Ainda não assistido'}
 async function play(item,b){if(b)b.disabled=true;try{const r=await fetch('/api/play',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id})}),data=await r.json();if(!r.ok)throw Error(data.error||'Não foi possível abrir o vídeo');toast('Reproduzindo'+(data.resume?' · retomando em '+time(data.resume):''))}catch(e){toast(e.message)}finally{if(b)b.disabled=false}}
-function meta(g){const row=el('div','metadata');if(g.rating)row.append(el('span','rating','★ '+Number(g.rating).toFixed(1)));if(g.year)row.append(el('span','',g.year));row.append(el('span','',g.type==='tv'?'Série':g.type==='movie'?'Filme':'Vídeo local'));if(g.items.length>1)row.append(el('span','',g.items.length+' arquivos'));for(const genre of(g.genres||[]).slice(0,2))row.append(el('span','',genre));return row}
+const ratingRequests = new Map();
+function ratingBadge(source, logo, score, media, imdbId) {
+ const badge = el('a','source-rating '+source);
+ const search=encodeURIComponent(media.title);
+ badge.href=source==='tmdb'
+  ? 'https://www.themoviedb.org/'+media.type+'/'+media.tmdb
+  : source==='imdb'
+   ? (/^tt\d+$/.test(imdbId||'')?'https://www.imdb.com/title/'+imdbId+'/':'https://www.imdb.com/find/?q='+search)
+   : 'https://www.rottentomatoes.com/search?search='+search;
+ badge.target='_blank';
+ badge.rel='noopener noreferrer';
+ badge.setAttribute('aria-label', (source==='rotten'?'Rotten Tomatoes':logo)+' '+score);
+ const mark = el('span','rating-brand',logo);
+ mark.setAttribute('aria-hidden','true');
+ if(source==='tmdb'){
+  const image=el('img','tmdb-rating-logo');
+  image.src='https://www.themoviedb.org/assets/2/v4/logos/v2/blue_square_2-d537fb228cf3ded904ef09b136fe3fec72548ebc1fea3fbbd1ad9e36364db38b.svg';
+  image.alt='';
+  image.onload=()=>mark.replaceChildren(image);
+ }
+ badge.append(mark,el('span','',score));
+ return badge;
+}
+function meta(g){
+ const row=el('div','metadata');
+ const ratings=el('span','source-ratings');
+ if(g.rating) ratings.append(ratingBadge('tmdb','TMDB',Number(g.rating).toFixed(1)+'/10',g));
+ row.append(ratings);
+ if(g.ratings){
+  if(g.ratings.imdb) ratings.append(ratingBadge('imdb','IMDb',g.ratings.imdb+'/10',g,g.ratings.imdbId));
+  if(g.ratings.rotten) ratings.append(ratingBadge('rotten','🍅',g.ratings.rotten,g));
+ }else if(g.tmdb && (g.type==='movie'||g.type==='tv')){
+  const key=g.type+'/'+g.tmdb;
+  if(!ratingRequests.has(key)){
+   const request=fetch('/api/shelf/ratings/'+key).then(response=>{
+    if(!response.ok) throw Error('Notas indisponíveis');
+    return response.json();
+   }).catch(()=>{ratingRequests.delete(key);return {};});
+   ratingRequests.set(key,request);
+  }
+  ratingRequests.get(key).then(async data=>{
+   if(!data.imdb || !data.rotten){
+    const local=titles.find(t=>t.type===g.type&&t.tmdb===g.tmdb);
+    if(local){
+     let stored=bundledDetails.titles[local.key]?.ratings;
+     try{
+      const response=await fetch('/api/shelf/'+local.key+'/extra');
+      if(response.ok) stored=(await response.json()).ratings||stored;
+     }catch{}
+     data={...stored,...data};
+    }
+   }
+   if(data.imdb) ratings.append(ratingBadge('imdb','IMDb',data.imdb+'/10',g,data.imdbId));
+   if(data.rotten) ratings.append(ratingBadge('rotten','🍅',data.rotten,g));
+  });
+ }
+ if(g.year)row.append(el('span','',g.year));row.append(el('span','',g.type==='tv'?'Série':g.type==='movie'?'Filme':'Vídeo local'));if(g.items.length>1)row.append(el('span','',g.items.length+' arquivos'));for(const genre of(g.genres||[]).slice(0,2))row.append(el('span','',genre));return row}
 let heroKey=null,heroFilter=null,heroDeadline=Date.now()+8000;
-function hero(step=0){const h=$('hero');h.hidden=filter==='video';if(h.hidden)return;const available=titles.filter(g=>filter==='movie'?g.type==='movie':filter==='tv'?g.type==='tv':filter==='continue'?!!g.resume:g.type!=='video');if(heroFilter!==filter){heroFilter=filter;heroKey=null}let index=available.findIndex(g=>g.key===heroKey);if(index<0)index=Math.max(0,available.findIndex(g=>g.resume&&g.backdrop));if(step&&available.length)index=(index+step+available.length)%available.length;const g=available[index];if(!g)return;heroKey=g.key;h.style.backgroundImage=g.backdrop?'url("'+g.backdrop+'")':'';h.replaceChildren();const c=el('div','hero-content');c.append(titleArtwork(g),meta(g),el('p','hero-description',g.synopsis||'Sua coleção particular, pronta para o próximo play.'));const row=el('div','action-row'),item=g.resume||g.items.find(x=>!x.watched)||g.items[0];const b=button(g.resume?'▶ Continuar · '+time(item.position):'▶ Assistir','primary',()=>play(item,b));row.append(b,button('Detalhes e episódios','secondary',()=>details(g)));c.append(row);h.append(c);if(available.length>1){const arrows=el('div','hero-arrows');for(const [direction,label,path] of [[-1,'Título anterior','M15 5L8 12L15 19'],[1,'Próximo título','M9 5L16 12L9 19']]){const a=button('','hero-arrow',()=>{heroDeadline=Date.now()+8000;hero(direction)});a.setAttribute('aria-label',label);a.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="'+path+'"/></svg>';arrows.append(a)}h.append(arrows)} }
+let heroSource = 'library';
+let trendingTitles;
+let trendingError;
+let loadingTrending = false;
+
+function heroSources() {
+ const controls = el('div','hero-sources');
+ controls.setAttribute('role','group');
+ controls.setAttribute('aria-label','Origem do destaque');
+ for (const [source,label] of [['library','Minha biblioteca'],['trending','Em alta']]) {
+  const choice = button(label,'',async () => {
+   heroSource = source;
+   heroDeadline = Date.now()+8000;
+   hero();
+   document.querySelector('.hero-sources [aria-pressed="true"]')?.focus({preventScroll:true});
+   if (source !== 'trending' || loadingTrending || trendingTitles) return;
+   loadingTrending = true;
+   trendingError = null;
+   try {
+    const response = await fetch('/api/shelf/trending');
+    const data = await response.json();
+    if (!response.ok) throw Error(data.error || 'TMDB temporariamente indisponível.');
+    trendingTitles = data.titles;
+   } catch (error) {
+    trendingError = error.message;
+   } finally {
+    loadingTrending = false;
+    if (filter === 'all' && heroSource === 'trending') hero();
+   }
+  });
+  choice.setAttribute('aria-pressed',String(heroSource === source));
+  controls.append(choice);
+ }
+ return controls;
+}
+function hero(step=0){const h=$('hero');h.hidden=filter==='video';if(h.hidden)return;const inTrending=filter==='all'&&heroSource==='trending';const available=inTrending?(trendingTitles||[]):titles.filter(g=>filter==='movie'?g.type==='movie':filter==='tv'?g.type==='tv':filter==='continue'?!!g.resume:g.type!=='video');const context=inTrending?'trending':filter;if(heroFilter!==context){heroFilter=context;heroKey=null}let index=available.findIndex(g=>g.key===heroKey);if(index<0)index=Math.max(0,available.findIndex(g=>g.resume&&g.backdrop));if(step&&available.length)index=(index+step+available.length)%available.length;const g=available[index];if(!g){h.style.backgroundImage='';h.replaceChildren();if(filter==='all'){const content=el('div','hero-content');content.append(heroSources(),el('p','hero-description',inTrending?(trendingError||(trendingTitles?'Nenhum título em alta encontrado.':'Buscando os títulos em alta…')):'Sua biblioteca está vazia.'));h.append(content)}return}heroKey=g.key;h.style.backgroundImage=g.backdrop?'url("'+g.backdrop+'")':'';h.replaceChildren();const c=el('div','hero-content');if(filter==='all')c.append(heroSources());c.append(titleArtwork(g),meta(g),el('p','hero-description',g.synopsis||(inTrending?'Sinopse indisponível.':'Sua coleção particular, pronta para o próximo play.')));const local=inTrending?titles.find(t=>t.type===g.type&&t.tmdb===g.tmdb):g;if(local){const row=el('div','action-row'),item=local.resume||local.items.find(x=>!x.watched)||local.items[0];const b=button(local.resume?'▶ Continuar · '+time(item.position):'▶ Assistir','primary',()=>play(item,b));row.append(b,button('Detalhes e episódios','secondary',()=>details(local)));c.append(row)}else c.append(el('span','trending-caption','Em alta na semana · TMDB'));h.append(c);if(available.length>1){const arrows=el('div','hero-arrows');for(const [direction,label,path] of [[-1,'Título anterior','M15 5L8 12L15 19'],[1,'Próximo título','M9 5L16 12L9 19']]){const a=button('','hero-arrow',()=>{heroDeadline=Date.now()+8000;hero(direction)});a.setAttribute('aria-label',label);a.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="'+path+'"/></svg>';arrows.append(a)}h.append(arrows)} }
 function visible(){return titles.filter(g=>(filter==='all'?g.type!=='video':filter==='continue'?!!g.resume:g.type===filter)&&(!query||query.split(/\s+/).every(t=>fold(g.title+' '+g.localTitle+' '+g.items.map(x=>x.name).join(' ')).includes(t))))}
 function render(){document.body.classList.toggle('local-videos',filter==='video');const items=visible();document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));$('shelf-title').textContent={all:'Sua coleção',movie:'Seus filmes',tv:'Suas séries',continue:'Continue de onde parou',video:'Vídeos locais'}[filter];$('shelf-kicker').textContent='';$('count').textContent=items.length+' títulos · '+items.reduce((n,g)=>n+g.items.length,0)+' arquivos';$('grid').replaceChildren();for(const g of items){const b=button('','poster-card',()=>details(g)),wrap=el('div','poster-wrap');if(g.poster){const img=el('img');img.src=g.poster.replace('/w342/','/w780/');img.srcset=g.poster.replace(/\/w\d+\//,'/w500/')+' 500w, '+g.poster.replace(/\/w\d+\//,'/w780/')+' 780w';img.sizes='(max-width:600px) 45vw, 22vw';img.alt='Capa de '+g.title;img.loading='lazy';img.onerror=()=>{img.remove();wrap.prepend(el('span','poster-placeholder',g.title.slice(0,2).toUpperCase()))};wrap.append(img)}else if(g.type==='video'){const img=el('img','local-thumbnail');img.src='/api/thumbnail/'+g.items[0].id;img.alt='Amostra do vídeo '+g.title;img.loading='lazy';img.onerror=()=>{img.remove();wrap.prepend(el('span','poster-placeholder','▷'))};wrap.append(img)}else wrap.append(el('span','poster-placeholder',g.title.slice(0,2).toUpperCase()));wrap.append(el('span','poster-shade'));const badge=g.resume?'Continuar · '+time(g.resume.position):g.watched===g.items.length?'✓ Assistido':g.type==='tv'?g.items.length+' episódios':!g.identified?'Arquivo local':'';if(badge)wrap.append(el('span','badge'+(g.resume?' resume':''),badge));b.append(wrap,el('h3','',g.title),el('p','',[g.year,g.type==='tv'?'Série':g.type==='movie'?'Filme':'Vídeo'].filter(Boolean).join(' · ')));b.setAttribute('aria-label',g.title+(g.resume?' · continuar em '+time(g.resume.position):''));$('grid').append(b)}if(!items.length)$('grid').append(el('p','empty',query?'Nenhum título encontrado nessa busca.':'Nenhum título nesta seção.'));}
 async function load(){if(refreshing)return;refreshing=true;try{const r=await fetch('/api/shelf/library'),d=await r.json();if(!r.ok)throw Error(d.error);const signature=JSON.stringify(d.titles);if(signature!==lastSignature){titles=d.titles.map(g=>g.logo?g:{...g,...bundledArtwork[g.key]});lastSignature=signature;hero();render();}const j=d.job;$('scan').classList.toggle('loading',j.running);$('scan').disabled=j.running;$('notice').textContent=j.running?'Buscando capas e sinopses · '+j.done+' de '+j.total:j.error||'';clearTimeout(pollTimer);if(j.running)pollTimer=setTimeout(load,1800)}catch(e){$('notice').textContent=e.message}finally{refreshing=false}}
@@ -20,7 +111,7 @@ async function scan(retry=false){$('scan').disabled=true;$('scan').classList.add
 function technicalLabel(t){const v=t?.video;return v?[v.resolution,v.codec,v.hdr,v.bitDepth?v.bitDepth+' bits':null].filter(Boolean).join(' · '):''}
 function technicalPanel(t){const panel=el('dl','technical-data');function add(label,value){if(!value)return;panel.append(el('dt','',label),el('dd','',value))}add('Vídeo',technicalLabel(t));add('Resolução',t?.video?.width&&t?.video?.height?t.video.width+' × '+t.video.height:null);add('Taxa de quadros',t?.video?.fps?t.video.fps.toFixed(3).replace(/0+$/,'').replace(/\.$/,'')+' fps':null);add('Bitrate',t?.bitrate?(t.bitrate/1000000).toFixed(1)+' Mbps':null);add('Duração',t?.duration?Math.floor(t.duration/60)+' min':null);add('Arquivo',t?.size?(t.size/1073741824).toFixed(2)+' GB · '+(t.container||''):t?.container);return panel}
 async function enrichDetail(g,content,page){let extra=bundledDetails.titles[g.key]||{};try{const r=await fetch('/api/shelf/'+g.key+'/extra');if(r.ok){const v=await r.json();if(v.updated)extra=v}}catch{}if(selected!==g.key||page.hidden)return;
- const notes=el('div','detail-facts');if(extra.certification)notes.append(el('span','certification',extra.certification==='L'?'Livre':extra.certification+' anos'));if(extra.runtime)notes.append(el('span','',extra.runtime+' min'));if(extra.ratings?.imdb)notes.append(el('span','external-rating','IMDb '+extra.ratings.imdb+'/10'));if(extra.ratings?.rotten)notes.append(el('span','external-rating','Rotten Tomatoes '+extra.ratings.rotten));const metadata=content.querySelector('.metadata');metadata?.after(notes);
+ const notes=el('div','detail-facts');if(extra.certification)notes.append(el('span','certification',extra.certification==='L'?'Livre':extra.certification+' anos'));if(extra.runtime)notes.append(el('span','',extra.runtime+' min'));const metadata=content.querySelector('.metadata');metadata?.after(notes);
  const credits=el('div','detail-credits');if(extra.directors?.length)credits.append(el('p','', 'Direção: '+extra.directors.join(', ')));if(extra.creators?.length)credits.append(el('p','', 'Criação: '+extra.creators.join(', ')));if(credits.children.length)content.append(credits);
  const item=g.resume||g.items[0];let tech=bundledDetails.files[item.id];try{const r=await fetch('/api/shelf/file/'+item.id);if(r.ok)tech=await r.json()}catch{}if(selected!==g.key||page.hidden)return;if(tech){const block=el('details','file-specs');block.append(el('summary','', 'Dados do arquivo · '+technicalLabel(tech)),technicalPanel(tech));content.append(block)}
  if(extra.cast?.length){const cast=el('section','cast-section');cast.append(el('h2','','Elenco'));const row=el('div','cast-row');for(const person of extra.cast){const card=el(person.id?'a':'article','cast-card');if(person.id){card.href='https://www.themoviedb.org/person/'+person.id;card.target='_blank';card.rel='noopener noreferrer';card.setAttribute('aria-label','Ver perfil de '+person.name+' no TMDB')}if(person.photo){const photo=el('img');photo.src=person.photo;photo.alt='';photo.loading='lazy';photo.onerror=()=>photo.remove();card.append(photo)}else card.append(el('span','cast-placeholder',person.name.slice(0,1)));card.append(el('strong','',person.name),el('small','',person.character));row.append(card)}cast.append(row);page.insertBefore(cast,page.querySelector('.episode-section'))} }
@@ -60,7 +151,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{if(selected){h
  setTimeout(()=>{if(context?.state!=='closed')context.close().catch(()=>{})},2500);
  }catch{}}
  if(new URLSearchParams(location.search).get('intro')==='preview'){intro.classList.add('intro-preview');return}
- signature();timer=setTimeout(()=>finish(false),1600);
+ signature();timer=setTimeout(()=>finish(false),1250);
 })();
 
 // Controles da janela do aplicativo.
@@ -80,6 +171,41 @@ if(window.chrome?.webview){
 
 // A sombra mantém o contraste quando as capas passam sob o cabeçalho.
 const fuaHeader=document.querySelector('.topbar');
+const windowModeButton=document.getElementById('fullscreen');
+function showWindowMode(fullscreen) {
+ windowModeButton.setAttribute('aria-label', fullscreen ? 'Restaurar janela' : 'Tela cheia');
+ windowModeButton.querySelector('path').setAttribute('d', fullscreen
+  ? 'M4 9H9V4M20 9H15V4M9 20V15H4M15 20V15H20'
+  : 'M9 4H4V9M15 4H20V9M4 15V20H9M20 15V20H15');
+}
+window.chrome?.webview?.addEventListener('message', event => {
+ if (event.data === 'window:fullscreen' || event.data === 'window:normal')
+  showWindowMode(event.data === 'window:fullscreen');
+});
+document.addEventListener('fullscreenchange', () => showWindowMode(Boolean(document.fullscreenElement)));
+let headerDragStart;
+const headerControls = 'button, a, input, select, textarea, label, [contenteditable]';
+fuaHeader?.addEventListener('dblclick', event => {
+ if (event.button !== 0 || event.target.closest(headerControls)) return;
+ windowModeButton.click();
+});
+fuaHeader?.addEventListener('pointerdown', event => {
+ if (event.button !== 0 || event.pointerType !== 'mouse' ||
+     event.target.closest(headerControls)) return;
+ headerDragStart = [event.clientX, event.clientY];
+});
+window.addEventListener('pointerup', () => { headerDragStart = null; });
+window.addEventListener('pointercancel', () => { headerDragStart = null; });
+window.addEventListener('pointermove', event => {
+ if (!headerDragStart) return;
+ if (!(event.buttons & 1)) {
+  headerDragStart = null;
+  return;
+ }
+ if (Math.hypot(event.clientX - headerDragStart[0], event.clientY - headerDragStart[1]) < 5) return;
+ headerDragStart = null;
+ window.chrome?.webview?.postMessage('drag-window');
+});
 const fuaHeaderScroll=()=>fuaHeader?.classList.toggle('is-scrolled',scrollY>32);
 addEventListener('scroll',fuaHeaderScroll,{passive:true});fuaHeaderScroll();
 

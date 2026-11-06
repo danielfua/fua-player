@@ -1,10 +1,14 @@
-# Fua Player 2.0.0
+# Fua Player 2.1.0
 
-- Anime4K em tempo real com seis perfis, versão e opção Desligado.
-- Miniaturas por Thumbfast com extrator mpv incluído e interpretação HDR.
-- Retomada de vídeos externos à biblioteca.
-- Limites de cache e histórico, com backup/restauração.
-- Controles arredondados e indicação de RTX HDR por cor.
-- Instalador completo Windows x64, sem mídias, chaves ou histórico pessoal.
+- Distribuição portátil em ZIP para Windows x64.
+- Configurações com navegação lateral e botões no padrão visual da biblioteca.
+- Fonte, tamanho, cor, posição e sincronização de legendas, preservando os estilos ASS.
+- Atalhos editáveis nas configurações e teclas Z/X para sincronizar legendas.
+- Configuração avançada do motor de vídeo com editor e restauração dos padrões.
+- Minha biblioteca e Em alta, com tendências semanais do TMDB.
+- Notas e links do TMDB, IMDb e Rotten Tomatoes, conforme disponibilidade.
+- Melhorias no arraste, redimensionamento, tela cheia e ícones da janela.
+- Ajustes de HDR/SDR e brilho automático conforme a tela.
+- Backup automático e sua seção removidos do aplicativo distribuído.
 
-SRGAN excluído por instabilidade e custo de GPU.
+Extraia o ZIP e abra FuaPlayer.exe. Configure suas pastas e suas próprias chaves de API.

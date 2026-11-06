@@ -57,6 +57,39 @@ local function time(t)t=math.max(0,math.floor(t or 0));return t>=3600 and string
 -- Thumbfast integration; a single temporary frame, no persistent timeline cache.
 local previewSettings={width=480}
 local previewData=os.getenv('FUA_DATA_DIR') or utils.join_path(scriptDir,'../data')
+local shadeOverlay=mp.create_osd_overlay('ass-events')
+shadeOverlay.z=-1
+local shadeWidth,shadeHeight,shadeVisible
+local function hideShade()
+ if shadeVisible then shadeOverlay:remove();shadeVisible=false end
+end
+local function showShade(w,h)
+ if shadeVisible and shadeWidth==w and shadeHeight==h then return end
+ local drawing=assdraw.ass_new()
+ local function opacity(y)
+  local top=math.max(0,1-y/(h*108/720))
+  local bottom=math.max(0,1-(h-1-y)/(h*192/720))
+  return math.floor(170*top*top*(3-2*top)+185*bottom*bottom*(3-2*bottom)+.5)
+ end
+ local y=0
+ while y<h do
+  local alpha=opacity(y)
+  local nextY=y+1
+  while nextY<h and opacity(nextY)==alpha do nextY=nextY+1 end
+  if alpha>0 then
+   drawing:new_event()
+   drawing:append(string.format('{\\an7\\pos(0,0)\\bord0\\shad0\\1c&H000000&\\1a&H%02X&}',255-alpha))
+   drawing:draw_start()
+   drawing:rect_cw(0,y,w,nextY)
+   drawing:draw_stop()
+  end
+  y=nextY
+ end
+ shadeOverlay.res_x=w;shadeOverlay.res_y=h
+ shadeOverlay.data=drawing.text
+ shadeOverlay:update()
+ shadeWidth=w;shadeHeight=h;shadeVisible=true
+end
 do local f=io.open(utils.join_path(previewData,'preview-settings.json'),'r');if f then local d=utils.parse_json(f:read('*a'));f:close();if type(d)=='table'then for k,v in pairs(d)do previewSettings[k]=v end end end end
 local previewWidth=math.floor(math.max(240,math.min(960,tonumber(previewSettings.width) or 480)))
 local preview={wanted=nil}
@@ -93,7 +126,7 @@ draw=function()
  local w,h=mp.get_osd_size();if w<=0 or h<=0 then return end
  H=720;W=720*w/h
  mp.set_property_native('user-data/fua-controls-visible',visible)
- if not visible then preview.wanted=nil;hide_preview();overlay.data='';overlay:update();if logoKey then mp.commandv('overlay-remove',60);logoKey=nil end;return end
+ if not visible then hideShade();preview.wanted=nil;hide_preview();overlay.data='';overlay:update();if logoKey then mp.commandv('overlay-remove',60);logoKey=nil end;return end
  local now=mp.get_time();local dt=math.min(0.1,now-frameAt);frameAt=now
  local a=assdraw.ass_new();zones={};local rawX,rawY=pointer_position();local mouseX,mouseY=rawX*W/w,rawY*H/h;local tooltip=nil;local tipX,tipY=0,0
  local function box(x,y,w,h,color,alpha)
@@ -157,14 +190,16 @@ draw=function()
   elseif name=='pause' then rect(-5,0,5,20,2.5);rect(5,0,5,20,2.5)
   elseif name=='≡' then
    for i=-1,1 do local yy=i*7;stroke(-10,yy,10,yy);local xx=i==0 and 5 or -4;stroke(xx,yy-3,xx,yy+3)end
-  elseif name=='♫' or name=='◖' or name=='×' then
+  elseif name=='♫' then
+   stroke(2,-9,2,6);stroke(2,-9,9,-6);disk(-1,6,3.3)
+  elseif name=='◖' or name=='×' then
    path({{-9,-4},{-5,-4},{1,-9},{3,-8},{3,8},{1,9},{-5,4},{-9,4}},true)
    if name=='×' then stroke(7,-4,13,4);stroke(7,4,13,-4)
    else arc(1,0,7,-.7,.7);if name=='♫' or mp.get_property_number('volume',100)>35 then arc(1,0,11,-.7,.7)end end
   elseif name=='▤' then rect(0,0,23,17,3);stroke(-7,0,-1,0);stroke(3,0,7,0);stroke(-7,4,3,4)
   elseif name=='↶' or name=='↷' then
    local sign=name=='↶' and -1 or 1;local points={}
-   for i=0,12 do local t=-math.pi*.8+math.pi*1.6*i/12;points[#points+1]={sign*math.cos(t)*10,-3+math.sin(t)*10}end;path(points)
+   for i=0,32 do local t=-math.pi*.8+math.pi*1.6*i/32;points[#points+1]={sign*math.cos(t)*10,-3+math.sin(t)*10}end;path(points)
    local px,py=sign*math.cos(-math.pi*.8)*10,-3+math.sin(-math.pi*.8)*10
    stroke(px,py,px+sign*5,py);stroke(px,py,px,py-5)
   elseif name=='RTX' then -- text only
@@ -178,7 +213,7 @@ draw=function()
   end
   output:new_event();output:append(string.format('{\\an7\\pos(%f,%f)\\fscx%.2f\\fscy%.2f\\bord0\\shad0\\1a&H00&\\1c&H%s&}',x,y,scale*100,scale*100,tint));output:append(geometry)
   if name=='A4K' then
-   text(x,y,shaderIndex>1 and ('A4K · '..shaderProfiles[shaderIndex].short) or 'A4K',14*scale,5,shaderIndex>1 and accent or 'FFFFFF')
+   text(x,y,shaderIndex>1 and ('A4K · '..shaderProfiles[shaderIndex].short) or 'A4K',16*scale,5,shaderIndex>1 and accent or 'FFFFFF')
   elseif name=='RTX' then
    text(x,y,'RTX',16*scale,5,active and accent or 'FFFFFF')
   elseif name=='↶' or name=='↷' then text(x,y-3,'10',9*scale,5,tint)
@@ -193,8 +228,7 @@ draw=function()
   zone(x-6,y-12,width+12,26,update,hint)
   zones[#zones].slide=update
  end
- for i=0,63 do box(0,H-192+i*3,W,3,'000000',string.format('%02X',math.floor(255-225*(i/63)^1.3)))end
-  for i=0,35 do box(0,i*3,W,3,'000000',string.format('%02X',math.floor(35+220*(i/35)^1.2)))end
+ showShade(w,h)
  icon(40,40,'←',function()host('library')end,'Voltar à biblioteca')
  icon(W-40,40,'×',function()host('close')end,'Fechar Fua Player')
  local title=mp.get_property('media-title','Fua Player');if #title>125 then title=title:sub(1,122)..'...'end
@@ -218,7 +252,7 @@ draw=function()
  icon(W/2,cy,mp.get_property_bool('pause') and 'play' or 'pause',function()mp.commandv('cycle','pause')end)
  icon(W/2+62,cy,'↷',function()mp.commandv('seek',10)end)
  local speed=mp.get_property_number('speed',1)
- icon(W-322,cy,'A4K',function()menuKind=menuKind=='shaders' and nil or 'shaders';draw()end,'Anime4K · '..shaderProfiles[shaderIndex].id)
+ icon(W-314,cy,'A4K',function()menuKind=menuKind=='shaders' and nil or 'shaders';draw()end,'Anime4K · '..shaderProfiles[shaderIndex].id)
  icon(W-248,cy,string.format('%.1f×',speed),function()mp.set_property_number('speed',speed>=2 and 0.5 or speed+0.25)end)
  icon(W-196,cy,'RTX',function()host('rtx')end)
  icon(W-144,cy,'▣',function()host('screenshot')end)
