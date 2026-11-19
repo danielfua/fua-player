@@ -4,6 +4,9 @@ local overlay=mp.create_osd_overlay('ass-events')
 local utils=require 'mp.utils'
 local scriptDir=utils.split_path(debug.getinfo(1,'S').source:gsub('^@',''))
 local logoPath=utils.join_path(scriptDir,'fua-logo.bgra')
+local titleLoaded,titleError=pcall(dofile,utils.join_path(scriptDir,'title-artwork.lua'));if not titleLoaded then mp.msg.warn(tostring(titleError))end
+local badgeLoaded,badgeError=pcall(dofile,utils.join_path(scriptDir,'hdr-badge.lua'));if not badgeLoaded then mp.msg.warn(tostring(badgeError))end
+local episodePanel=dofile(utils.join_path(scriptDir,'episode-panel.lua'))
 local logoKey=nil
 local shaderProfiles={{id='off',label='Desligado',short='A4K'},{id='A',label='Anime4K · A',short='A',file='Anime4K_ModeA.glsl'},{id='A+A',label='Anime4K · A+A',short='A+A',file='Anime4K_ModeA_A.glsl'},{id='B',label='Anime4K · B',short='B',file='Anime4K_ModeB.glsl'},{id='B+B',label='Anime4K · B+B',short='B+B',file='Anime4K_ModeB_B.glsl'},{id='C',label='Anime4K · C',short='C',file='Anime4K_ModeC.glsl'},{id='C+A',label='Anime4K · C+A',short='C+A',file='Anime4K_ModeC_A.glsl'}}
 for _,profile in ipairs(shaderProfiles)do if profile.file then local f=io.open(utils.join_path(scriptDir,'shaders/'..profile.file),'r');if f then local header=f:read(8192);f:close();profile.version=header:match('Anime4K%-v([%d%.]+)')end end end
@@ -24,7 +27,9 @@ end
 mp.register_script_message('fua-shader-select',function(id)for i,profile in ipairs(shaderProfiles)do if profile.id==id then apply_shader(i);return end end end)
 
 local hdrLabel=''
+local volumeFeedbackUntil=0
 local visible=false
+local hintAppearedAt=0
 local dragging=false
 local sliderDrag=nil
 local menuKind=nil
@@ -94,6 +99,58 @@ do local f=io.open(utils.join_path(previewData,'preview-settings.json'),'r');if 
 local previewWidth=math.floor(math.max(240,math.min(960,tonumber(previewSettings.width) or 480)))
 local preview={wanted=nil}
 local draw
+local castPeople,castLoading,castLoaded,castGeneration,castOffset={},false,false,0,0
+local castLift,castPhotos,castScroll=0,{},0
+local castFrom,castAt=0,0
+local controlsDismissed,castClosing=false,false
+local function moveCast(offset)
+ castFrom=castScroll;castOffset=offset;castAt=mp.get_time()
+end
+local function castEllipsis(value,width,size)
+ local chars,used={},0
+ for char in tostring(value or ''):gmatch('[%z\1-\127\194-\244][\128-\191]*')do
+  local weight=char:byte()>=227 and 1 or (char:match('[ilI%., ]')and .3 or .59)
+  if used+weight*size>width then
+   while #chars>0 and used+size*.8>width do local last=table.remove(chars);used=used-(last:byte()>=227 and 1 or .59)*size end
+   return table.concat(chars)..'…'
+  end
+  used=used+weight*size;chars[#chars+1]=char
+ end
+ return table.concat(chars)
+end
+local function hideCastPhotos()
+ for id in pairs(castPhotos)do mp.commandv('overlay-remove',id)end;castPhotos={}
+end
+local function loadCast()
+ if castLoading or castLoaded then return end
+ local path=mp.get_property('path');if not path then return end
+ castLoading=true;local token=castGeneration
+ mp.command_native_async({name='subprocess',args={utils.join_path(scriptDir,'CastArtwork.exe'),path},playback_only=true,capture_stdout=true,capture_stderr=true},function(ok,result)
+  if token~=castGeneration then return end
+  castLoading=false;castLoaded=true
+  if ok and result and result.status==0 then local data=utils.parse_json(result.stdout or '');castPeople=data and data.cast or {} end
+  if draw then draw()end
+ end)
+end
+mp.register_script_message('fua-cast-toggle',function(value)
+ controlsDismissed=false;castClosing=false
+ local open=value=='yes';mp.set_property_native('user-data/fua-cast-open',open)
+ if open then loadCast()end
+ if draw then draw()end
+end)
+mp.register_event('start-file',function()castGeneration=castGeneration+1;castPeople={};castLoading=false;castLoaded=false;castOffset=0;castScroll=0;castLift=0;hideCastPhotos();mp.set_property_native('user-data/fua-cast-open',false);mp.set_property_number('user-data/fua-bottom-lift',0)end)
+mp.register_event('file-loaded',loadCast)
+mp.register_event('shutdown',hideCastPhotos)
+local headingGeneration=0
+mp.register_event('start-file',function()headingGeneration=headingGeneration+1;mp.set_property('user-data/fua-display-title','')end)
+mp.register_event('file-loaded',function()
+ local file=mp.get_property('path');if not file then return end;local token=headingGeneration
+ mp.command_native_async({name='subprocess',args={utils.join_path(scriptDir,'../node.exe'),utils.join_path(scriptDir,'../playback-title.cjs'),file},playback_only=true,capture_stdout=true,capture_stderr=true},function(ok,result)
+  if token~=headingGeneration or not ok or not result or result.status~=0 then return end
+  local data=utils.parse_json(result.stdout or '');if data and data.title then mp.set_property('user-data/fua-display-title',data.title);draw()end
+ end)
+end)
+local previewHeight=270
 local previewVisible=false
 local previewPosition=nil
 local thumbInfo=nil
@@ -108,7 +165,7 @@ mp.register_script_message('thumbfast-render',function(value)
  local r=utils.parse_json(value)
  if r then r.received=mp.get_time();mp.set_property('user-data/fua-preview-response',utils.format_json(r))end
  if not r or not previewPosition then return end
- local h=math.floor(previewWidth*r.height/r.width+.5)
+ local h=math.floor(previewWidth*r.height/r.width+.5);previewHeight=h
  local c={name='overlay-add',id=61,x=previewPosition.x,y=math.max(0,math.floor(previewPosition.y-h-14)),file=r.thumbnail..'.bgra',offset=0,fmt='bgra',w=r.width,h=r.height,stride=r.width*4,dw=previewWidth,dh=h}
  local source=mp.get_property_native('video-params') or {}
  if overlayVideoColorspace then c.video_colorspace=source.gamma=='pq' or source.gamma=='hlg' end
@@ -126,9 +183,25 @@ draw=function()
  local w,h=mp.get_osd_size();if w<=0 or h<=0 then return end
  H=720;W=720*w/h
  mp.set_property_native('user-data/fua-controls-visible',visible)
- if not visible then hideShade();preview.wanted=nil;hide_preview();overlay.data='';overlay:update();if logoKey then mp.commandv('overlay-remove',60);logoKey=nil end;return end
+ if not visible then episodePanel.draw(false,0,0);hideCastPhotos();hideShade();preview.wanted=nil;hide_preview();overlay.data='';overlay:update();if logoKey then mp.commandv('overlay-remove',60);logoKey=nil end;return end
  local now=mp.get_time();local dt=math.min(0.1,now-frameAt);frameAt=now
+ local target=mp.get_property_native('user-data/fua-cast-open')==true and 130 or 0
+ local smoothing=1-math.exp(-dt*6.5)
+ castLift=castLift+(target-castLift)*smoothing
+ local slide=math.min(1,(now-castAt)/.5)
+ castScroll=castFrom+(castOffset-castFrom)*(slide*slide*(3-2*slide))
+ if math.abs(castScroll-castOffset)<.005 then castScroll=castOffset end
+ if math.abs(castLift-target)<.3 then castLift=target end
+ mp.set_property_number('user-data/fua-bottom-lift',castLift)
  local a=assdraw.ass_new();zones={};local rawX,rawY=pointer_position();local mouseX,mouseY=rawX*W/w,rawY*H/h;local tooltip=nil;local tipX,tipY=0,0
+ local function captionBackground(x,y,w,h)
+  local r=7;local k=.55228475*r
+  a:new_event();a:append('{\\an7\\pos(0,0)\\bord0\\shad0\\1c&H18120C&\\1a&H77&}');a:draw_start()
+  a:move_to(x+r,y);a:line_to(x+w-r,y);a:bezier_curve(x+w-r+k,y,x+w,y+r-k,x+w,y+r)
+  a:line_to(x+w,y+h-r);a:bezier_curve(x+w,y+h-r+k,x+w-r+k,y+h,x+w-r,y+h)
+  a:line_to(x+r,y+h);a:bezier_curve(x+r-k,y+h,x,y+h-r+k,x,y+h-r)
+  a:line_to(x,y+r);a:bezier_curve(x,y+r-k,x+r-k,y,x+r,y);a:draw_stop()
+ end
  local function box(x,y,w,h,color,alpha)
   a:new_event();a:append(string.format('{\\an7\\pos(0,0)\\bord0\\shad0\\1c&H%s&\\1a&H%s&}',color or 'FFFFFF',alpha or '00'));a:draw_start();a:rect_cw(x,y,x+w,y+h);a:draw_stop()
  end
@@ -136,8 +209,8 @@ draw=function()
   a:new_event();a:append(string.format('{\\an7\\pos(0,0)\\bord0\\shad0\\1c&H%s&\\1a&H00&}',color or accent));a:draw_start()
   for i=0,24 do local angle=i/24*math.pi*2;local px,py=x+math.cos(angle)*r,y+math.sin(angle)*r;if i==0 then a:move_to(px,py)else a:line_to(px,py)end end;a:draw_stop()
  end
- local function text(x,y,t,size,align,color)
-  a:new_event();a:append(string.format('{\\an%d\\pos(%f,%f)\\fnSegoe UI\\fs%.2f\\bord0\\shad0\\1a&H00&\\1c&H%s&}',align or 5,x,y,size or 19,color or 'FFFFFF'));a:append(esc(t))
+ local function text(x,y,t,size,align,color,bold)
+  a:new_event();a:append(string.format('{\\an%d\\pos(%f,%f)\\fnSegoe UI\\fs%.2f\\bord0\\shad0\\1a&H00&\\1c&H%s&}',align or 5,x,y,size or 19,color or 'FFFFFF'));if bold then a:append('{\\b1}')end;a:append(esc(t))
  end
   local function zone(x,y,w,h,fn,hint)
   zones[#zones+1]={x=x,y=y,w=w,h=h,fn=fn,hint=hint}
@@ -151,12 +224,12 @@ draw=function()
  local function icon(x,y,name,fn,hint)
     local hints={['≡']='Voltar à biblioteca',['♫']='Escolher áudio',['▤']='Escolher legenda',['◖']='Silenciar',['×']='Ativar som',play='Reproduzir',pause='Pausar',['↶']='Voltar 10 segundos',['↷']='Avançar 10 segundos',RTX='Ligar/desligar RTX HDR',['▣']='Salvar imagem do vídeo',['ⓘ']='Informações do vídeo',['⛶']='Tela cheia',['—']='Minimizar',['□']='Maximizar / restaurar'}
   local level=zone(x-21,y-22,42,44,fn,hint or hints[name] or 'Velocidade de reprodução')
-  local active=(name=='A4K' and shaderIndex>1) or (name=='RTX' and hdrLabel:find('confirmado')) or (name=='♫' and menuKind=='audio') or (name=='▤' and menuKind=='sub') or (name=='≡' and menuKind=='main')
+  local active=(name=='episodes' and episodePanel.open) or (name=='A4K' and shaderIndex>1) or (name=='RTX' and hdrLabel:find('confirmado')) or (name=='♫' and menuKind=='audio') or (name=='▤' and menuKind=='sub') or (name=='≡' and menuKind=='main')
   local tint=(name=='×' and y<100 and level>0.08) and '6E62FF' or ((active or level>0.08) and accent or 'FFFFFF')
   local baseScale=({['▣']=0.82,['ⓘ']=0.88,['⛶']=0.88})[name] or 1
   local scale=baseScale*(1+0.10*level)
   local output=a
-  local key=name..((name=='◖' and mp.get_property_number('volume',100)>35) and ':loud' or '')
+  local key=name..((name=='×' and y>=100) and ':mute' or '')..((name=='◖' and mp.get_property_number('user-data/fua-system-volume',100)>35) and ':loud' or '')
   local geometry=iconGeometry[key]
   if not geometry then
   local a=assdraw.ass_new()
@@ -184,7 +257,10 @@ draw=function()
    arc(cx+w/2-r,cy-h/2+r,r,-math.pi/2,0);arc(cx+w/2-r,cy+h/2-r,r,0,math.pi/2)
    arc(cx-w/2+r,cy+h/2-r,r,math.pi/2,math.pi);arc(cx-w/2+r,cy-h/2+r,r,math.pi,math.pi*1.5)
   end
-  if name=='←' then path({{-2,-8},{-10,0},{-2,8}});stroke(-10,0,10,0)
+  if name=='episodes' then path({{-10,-7},{-10,7},{-3,0}},true);stroke(1,-7,10,-7);stroke(1,0,10,0);stroke(1,7,10,7)
+  elseif name=='cast-next' then path({{-3,-7},{4,0},{-3,7}})
+  elseif name=='cast-prev' then path({{3,-7},{-4,0},{3,7}})
+  elseif name=='←' then path({{-2,-8},{-10,0},{-2,8}});stroke(-10,0,10,0)
   elseif name=='×' and y<100 then stroke(-7,-7,7,7);stroke(-7,7,7,-7)
   elseif name=='play' then path({{-6,-10},{-8,-9},{-8,9},{-6,10},{10,1.8},{11,0},{10,-1.8}},true)
   elseif name=='pause' then rect(-5,0,5,20,2.5);rect(5,0,5,20,2.5)
@@ -194,11 +270,11 @@ draw=function()
    stroke(2,-9,2,6);stroke(2,-9,9,-6);disk(-1,6,3.3)
   elseif name=='◖' or name=='×' then
    path({{-9,-4},{-5,-4},{1,-9},{3,-8},{3,8},{1,9},{-5,4},{-9,4}},true)
-   if name=='×' then stroke(7,-4,13,4);stroke(7,4,13,-4)
-   else arc(1,0,7,-.7,.7);if name=='♫' or mp.get_property_number('volume',100)>35 then arc(1,0,11,-.7,.7)end end
+   if name=='×' then stroke(7,-3.5,13,3.5);stroke(7,3.5,13,-3.5)
+   else arc(1,0,7,-.7,.7);if name=='♫' or mp.get_property_number('user-data/fua-system-volume',100)>35 then arc(1,0,11,-.7,.7)end end
   elseif name=='▤' then rect(0,0,23,17,3);stroke(-7,0,-1,0);stroke(3,0,7,0);stroke(-7,4,3,4)
   elseif name=='↶' or name=='↷' then
-   local sign=name=='↶' and -1 or 1;local points={}
+   local sign=name=='↶' and 1 or -1;local points={}
    for i=0,32 do local t=-math.pi*.8+math.pi*1.6*i/32;points[#points+1]={sign*math.cos(t)*10,-3+math.sin(t)*10}end;path(points)
    local px,py=sign*math.cos(-math.pi*.8)*10,-3+math.sin(-math.pi*.8)*10
    stroke(px,py,px+sign*5,py);stroke(px,py,px,py-5)
@@ -215,7 +291,7 @@ draw=function()
   if name=='A4K' then
    text(x,y,shaderIndex>1 and ('A4K · '..shaderProfiles[shaderIndex].short) or 'A4K',16*scale,5,shaderIndex>1 and accent or 'FFFFFF')
   elseif name=='RTX' then
-   text(x,y,'RTX',16*scale,5,active and accent or 'FFFFFF')
+   text(x,y,'RTX',16*scale,5,active and accent or 'FFFFFF',active)
   elseif name=='↶' or name=='↷' then text(x,y-3,'10',9*scale,5,tint)
   elseif name:match('^[%d%.]+×$') then text(x,y,name,15*scale,5,tint)end
 
@@ -231,34 +307,74 @@ draw=function()
  showShade(w,h)
  icon(40,40,'←',function()host('library')end,'Voltar à biblioteca')
  icon(W-40,40,'×',function()host('close')end,'Fechar Fua Player')
- local title=mp.get_property('media-title','Fua Player');if #title>125 then title=title:sub(1,122)..'...'end
- text(28,H-105,title,20,4)
+ local title=mp.get_property('user-data/fua-display-title','');if title=='' then title=mp.get_property('media-title','Fua Player')end
+ text(78,40,castEllipsis(title,math.max(80,W-280),20),20,4)
+ text(28,H-105-castLift,castEllipsis(mp.get_property('filename',mp.get_property('media-title','Fua Player')),W-56,20),20,4)
  local pos=mp.get_property_number('time-pos',0);local dur=mp.get_property_number('duration',0)
- local x1,x2,y=28,W-28,H-76
+ local x1,x2,y=28,W-28,H-76-castLift
  box(x1,y,x2-x1,3,'FFFFFF','99');if dur>0 then box(x1,y,(x2-x1)*math.min(1,pos/dur),3,accent)end
+ local chapters=mp.get_property_native('chapter-list',{}) or {}
+ if dur>0 then for _,chapter in ipairs(chapters)do local t=tonumber(chapter.time);if t and t>0 and t<dur then local cx=x1+(x2-x1)*t/dur;box(cx-1,y-2,2,7,'111820')end end end
  local mx,my=pointer_position();mx=mx*W/w;my=my*H/h
  local hover=pointer_inside() and mx>=x1 and mx<=x2 and my>=y-14 and my<=y+16
- if hover and dur>0 and not menuKind then local target=dur*math.max(0,math.min(1,(mx-x1)/(x2-x1)));preview_frame(target,math.max(165,math.min(w-165,mx*w/W)),y*h/H);text(mx,y-23,time(target),15)else hide_preview();preview.wanted=nil end
+ if hover and dur>0 and not menuKind then local target=dur*math.max(0,math.min(1,(mx-x1)/(x2-x1)));preview_frame(target,math.max(165,math.min(w-165,mx*w/W)),y*h/H);local chapterName=nil;for i,chapter in ipairs(chapters)do if tonumber(chapter.time) and chapter.time<=target then chapterName=chapter.title or ('Capítulo '..i)end end;local caption=time(target);if chapterName then caption=caption..' · '..chapterName end;if previewPosition then local cx=(previewPosition.x+previewWidth/2)*W/w;local top=math.max(0,previewPosition.y-previewHeight-14)*H/h;caption=castEllipsis(caption,previewWidth*W/w-16,14);captionBackground(previewPosition.x*W/w,math.max(0,top-27),previewWidth*W/w,24);text(cx,math.max(12,top-15),caption,14,5)end else hide_preview();preview.wanted=nil end
  if hover or mp.get_property_bool('pause')then circle(x1+(x2-x1)*(dur>0 and math.min(1,pos/dur) or 0),y+1.5,hover and 6 or 4.5,accent)end
  zone(x1,y-13,x2-x1,28,function(px)if dur>0 then mp.commandv('seek',math.max(0,math.min(1,(px-x1)/(x2-x1)))*dur,'absolute+exact')end end,'Ir para '..time(dur*math.max(0,math.min(1,(mouseX-x1)/(x2-x1)))))
- local cy=H-35
+  local castOpen=mp.get_property_native('user-data/fua-cast-open')==true
+ local elapsed=mp.get_time()-hintAppearedAt
+ local glow=elapsed<1 and math.sin(elapsed*math.pi) or 0
+ local hintY=H-8-castLift
+ a:new_event();a:append(string.format('{\\an7\\pos(0,0)\\bord0\\shad0\\1c&HBBD7E9&\\1a&H%02X&}',math.floor(100-glow*70)))
+ a:draw_start()
+ local sign=castOpen and -1 or 1;local center=W/2
+ a:move_to(center-10,hintY-3*sign);a:line_to(center,hintY+2*sign);a:line_to(center+10,hintY-3*sign);a:line_to(center+10,hintY-1*sign);a:line_to(center,hintY+4*sign);a:line_to(center-10,hintY-1*sign);a:line_to(center-10,hintY-3*sign);a:draw_stop()
+ zone(W/2-30,H-20-castLift,60,20,function()host(castOpen and 'cast-close' or 'cast-open')end,castOpen and 'Recolher elenco' or 'Rolar para baixo: elenco')
+ local cy=H-35-castLift
  icon(40,cy,'≡',function()if menuKind=='main' then menuKind=nil else menuKind='main';menuX=28;menuY=H-400 end;draw()end,'Menu do player')
  icon(84,cy,'♫',function()openTracks('audio')end)
  icon(128,cy,'▤',function()openTracks('sub')end)
- icon(172,cy,mp.get_property_bool('mute') and '×' or '◖',function()mp.commandv('cycle','mute')end)
- local vol=mp.get_property_number('volume',100);slider(196,cy,58,vol,0,100,function(v)mp.set_property_number('volume',v)end,'Volume · '..math.floor(vol)..'%')
- text(274,cy,time(pos)..' / '..time(dur),16,4)
+ icon(172,cy,(mp.get_property('user-data/fua-system-mute')=='yes') and '×' or '◖',function()host('system-mute')end)
+ local vol=mp.get_property_number('user-data/fua-system-volume',100);slider(196,cy,76,vol,0,100,function(v)host('volume:'..v)end,'Volume · '..math.floor(vol)..'%')
+ if sliderDrag or (pointer_inside() and mouseX>=190 and mouseX<=278 and mouseY>=cy-22 and mouseY<=cy+22) or mp.get_time()<volumeFeedbackUntil then text(196+76*math.max(0,math.min(100,vol))/100,cy-23,tostring(math.floor(vol+0.5))..'%',12)end
+ text(292,cy,time(pos)..' / '..time(dur),16,4)
  icon(W/2-62,cy,'↶',function()mp.commandv('seek',-10)end)
  icon(W/2,cy,mp.get_property_bool('pause') and 'play' or 'pause',function()mp.commandv('cycle','pause')end)
  icon(W/2+62,cy,'↷',function()mp.commandv('seek',10)end)
  local speed=mp.get_property_number('speed',1)
- icon(W-314,cy,'A4K',function()menuKind=menuKind=='shaders' and nil or 'shaders';draw()end,'Anime4K · '..shaderProfiles[shaderIndex].id)
- icon(W-248,cy,string.format('%.1f×',speed),function()mp.set_property_number('speed',speed>=2 and 0.5 or speed+0.25)end)
- icon(W-196,cy,'RTX',function()host('rtx')end)
- icon(W-144,cy,'▣',function()host('screenshot')end)
- icon(W-92,cy,'ⓘ',function()mp.commandv('script-message','fua-stats-cycle')end)
+ icon(W-(314+(episodePanel.available() and 44 or 0)),cy,'A4K',function()menuKind=menuKind=='shaders' and nil or 'shaders';draw()end,'Anime4K · '..shaderProfiles[shaderIndex].id)
+ icon(W-(248+(episodePanel.available() and 44 or 0)),cy,string.format('%.1f×',speed),function()mp.set_property_number('speed',speed>=2 and 0.5 or speed+0.25)end)
+ icon(W-(196+(episodePanel.available() and 44 or 0)),cy,'RTX',function()host('rtx')end)
+ icon(W-(144+(episodePanel.available() and 44 or 0)),cy,'▣',function()host('screenshot')end)
+ icon(W-(92+(episodePanel.available() and 44 or 0)),cy,'ⓘ',function()mp.commandv('script-message','fua-stats-cycle')end)
+ if episodePanel.available() then icon(W-84,cy,'episodes',function()menuKind=nil;episodePanel.toggle();draw()end,'Episódios disponíveis')end
  icon(W-40,cy,'⛶',function()host('fullscreen')end)
  
+ if castLift>1 then
+  local top=H-castLift
+  local count=math.min(18,math.max(1,math.floor((W-160)/88)));local used={}
+  local rowWidth=math.min(count,#castPeople)*88
+  local start=(W-rowWidth)/2
+  for slot,person in ipairs(castPeople)do
+   local cx=start+44+(slot-1-castScroll)*88;local py=top+22;local id=29+slot
+   if slot<=18 and cx>=start+32 and cx<=start+rowWidth-32 then
+   if person.file then
+    local px,iy,size=math.floor((cx-32)*w/W),math.floor(py*h/H),math.floor(64*h/H)
+    local key=person.file..':'..px..':'..iy..':'..size
+    if castPhotos[id]~=key then mp.command_native({name='overlay-add',id=id,x=px,y=iy,file=person.file,offset=0,fmt='bgra',w=144,h=144,stride=576,dw=size,dh=size});castPhotos[id]=key end
+    used[id]=true
+   else circle(cx,py+32,32,'3C2D1C');text(cx,py+32,tostring(person.name or '?'):sub(1,1),22)end
+   local name=tostring(person.name or '')
+   text(cx,py+78,castEllipsis(name,80,10.5),10.5,5,'D8E5F0')
+   text(cx,py+92,castEllipsis(person.character,80,9.5),9.5,5,'A59A8C')
+   zone(cx-39,py,78,104,function()local id=tostring(person.id or '');if id:match('^%d+$')then mp.set_property_bool('pause',true);mp.commandv('run','explorer.exe','https://www.themoviedb.org/person/'..id)end end,name)
+   end
+  end
+  for id in pairs(castPhotos)do if not used[id]then mp.commandv('overlay-remove',id);castPhotos[id]=nil end end
+  if #castPeople>count then
+   icon(start+rowWidth+30,top+56,'cast-next',function()moveCast(math.min(math.max(0,#castPeople-count),castOffset+math.max(1,count-1)));draw()end,'Próximos atores')
+   icon(start-30,top+56,'cast-prev',function()moveCast(math.max(0,castOffset-math.max(1,count-1)));draw()end,'Atores anteriores')
+  end
+ else hideCastPhotos()end
  local label=hdrLabel
  -- HDR status is shown by the discreet RTX button, without a debug label.
   if menuKind=='audio' or menuKind=='sub' then
@@ -266,7 +382,7 @@ draw=function()
   if menuKind=='sub' then choices[#choices+1]={id='no',title='Desligar legendas'} end
   for _,tr in ipairs(tracks)do if tr.type==menuKind then choices[#choices+1]=tr end end
   trackChoices=choices
-  local pw=math.min(500,W-56);local count=math.min(trackPageSize,#choices);trackOffset=math.max(0,math.min(trackOffset,#choices-count));local ph=count*30+76;local px=28;local py=H-90-ph
+  local pw=math.min(500,W-56);local count=math.min(trackPageSize,#choices);trackOffset=math.max(0,math.min(trackOffset,#choices-count));local ph=count*30+(menuKind=='sub' and 110 or 76);local px=28;local py=H-90-ph
   box(px,py,pw,ph,'16100B','0B');text(px+18,py+21,menuKind=='audio' and 'Áudio' or 'Legendas',18,4)
   for row=1,count do local n=row+trackOffset;local tr=choices[n];local id=tr.id;local prop=menuKind=='audio' and 'aid' or 'sid';local label=tr.title or ((tr.lang or 'Faixa')..'  '..tostring(id));if tr.lang and tr.title then label=tr.lang..' · '..label end
    local ry=py+42+(row-1)*30;local chosen=tostring(mp.get_property(prop))==tostring(id)
@@ -278,9 +394,15 @@ draw=function()
    local sy,sh=py+42,count*30;box(px+pw-12,sy,3,sh,'FFFFFF','D0');local thumb=math.max(20,sh*count/#choices);box(px+pw-13,sy+(sh-thumb)*trackOffset/math.max(1,#choices-count),5,thumb,accent)
    zone(px+pw-22,sy,22,sh,function(_,y)trackOffset=math.floor(math.max(0,math.min(1,(y-sy)/sh))*(#choices-count)+0.5);draw()end,'Rolar lista')
   end
-  local fy=py+ph-17;text(px+18,fy,tostring(trackOffset+1)..'–'..tostring(trackOffset+count)..' de '..tostring(#choices),12,4,'C8B8A0')
+  local fy=py+ph-(menuKind=='sub' and 51 or 17);text(px+18,fy,tostring(trackOffset+1)..'–'..tostring(trackOffset+count)..' de '..tostring(#choices),12,4,'C8B8A0')
   zone(px+pw-92,fy-14,36,28,function()trackOffset=math.max(0,trackOffset-count);draw()end,'Página anterior');text(px+pw-74,fy,'↑',19)
   zone(px+pw-50,fy-14,36,28,function()trackOffset=math.min(math.max(0,#choices-count),trackOffset+count);draw()end,'Próxima página');text(px+pw-32,fy,'↓',19)
+  if menuKind=='sub' then
+   local settingsY=py+ph-34
+   local level=zone(px+8,settingsY,pw-16,30,function()menuKind=nil;draw();host('subtitle-settings')end,'Ajustar fonte, tamanho, cor, posição e sincronização')
+   if level>0.08 then box(px+8,settingsY,pw-16,30,accent,'E6')end
+   text(px+18,settingsY+15,'Ajustes de legenda…',15+level,4,accent)
+  end
   mp.set_property('user-data/fua-track-menu-state',menuKind..':'..trackOffset..':'..count..':'..#choices)
  end
  if menuKind=='shaders' then
@@ -314,16 +436,18 @@ draw=function()
   for i,item in ipairs(choices)do local y=py+46+(i-1)*28;local level=zone(px+12,y,pw-24,28,item[2],item[1]);text(px+20,y+14,item[1],15+level,4,level>0.08 and accent or 'FFFFFF')end
  end
 
- mp.set_property_native('user-data/fua-menu-open',menuKind~=nil)
+ mp.set_property_native('user-data/fua-menu-open',menuKind~=nil or episodePanel.open)
  mp.set_property_native('user-data/fua-track-menu',menuKind=='audio' or menuKind=='sub')
- overlay.res_x=W;overlay.res_y=H;overlay.data=a.text;overlay:update()
+ overlay.res_x=W;overlay.res_y=H;overlay.data=a.text;overlay:update();episodePanel.draw(visible,rawX/w,rawY/h)
 end
 local function hover_controls()
  local x,y=pointer_position();local w,h=mp.get_osd_size()
  return pointer_inside() and h>0 and (y/h>=590/720 or y/h<=100/720)
 end
 local function update_visibility()
- visible=menuKind~=nil or (pointer_inside() and (hover_controls() or dragging or sliderDrag~=nil))
+ local wasVisible=visible
+ visible=episodePanel.active() or (castClosing and castLift>.3) or (not controlsDismissed and (mp.get_property_native('user-data/fua-cast-open')==true or menuKind~=nil or (pointer_inside() and (hover_controls() or dragging or sliderDrag~=nil))))
+ if visible and not wasVisible then hintAppearedAt=mp.get_time()end
  draw()
 end
 local function seek_at(nx)
@@ -333,9 +457,37 @@ local function seek_at(nx)
  if dur>0 then mp.commandv('seek',fraction*dur,'absolute+exact')end
 end
 local lastSeek=0
+local wheelRemainder=0;local wheelArea=nil
+mp.register_script_message('fua-native-wheel',function(nx,ny,delta)
+ local w,h=mp.get_osd_size();local width=720*w/h
+ if episodePanel.wheel(tonumber(nx)or 0,tonumber(ny)or 0,delta)then update_visibility();return end
+ local x,y=(tonumber(nx)or 0)*width,(tonumber(ny)or 0)*720
+ local cy=720-35-castLift;local area=nil
+ if x>=190 and x<=278 and math.abs(y-cy)<=24 then area='volume'
+ elseif (math.abs(x-(width-314-(episodePanel.available() and 44 or 0)))<=30 and math.abs(y-cy)<=24)or(menuKind=='shaders' and x>=width-338 and x<=width-28 and y>=310 and y<=630)then area='shader'
+ elseif not menuKind and math.abs(x-width/2)<=65 and y>=cy-24 then area='cast' end
+ if not area then wheelRemainder=0;wheelArea=nil;return end
+ if wheelArea~=area then wheelRemainder=0;wheelArea=area end
+ wheelRemainder=wheelRemainder+(tonumber(delta)or 0)
+ local steps=wheelRemainder>=0 and math.floor(wheelRemainder/120)or math.ceil(wheelRemainder/120)
+ if steps==0 then return end
+ wheelRemainder=wheelRemainder-steps*120
+ if area=='volume' then
+  local value=math.max(0,math.min(100,mp.get_property_number('user-data/fua-system-volume',100)+steps))
+  host('volume:'..value)
+ elseif area=='shader' then
+  apply_shader(((shaderIndex-1-steps)%#shaderProfiles)+1)
+ else
+  controlsDismissed=false;castClosing=false
+  mp.set_property_native('user-data/fua-cast-open',steps<0)
+  if steps<0 then loadCast()end
+ end
+ update_visibility()
+end)
 local bodyClickAt=-10;local bodyClickX,bodyClickY=0,0;local bodyPauseBefore=false
 mp.register_script_message('fua-native-pointer',function(nx,ny,inside)
  nativePointer={x=tonumber(nx) or 0,y=tonumber(ny) or 0,inside=inside=='yes'}
+ if controlsDismissed and hover_controls() then controlsDismissed=false;castClosing=false end
  if sliderDrag then local w,h=mp.get_osd_size();sliderDrag(nativePointer.x*720*w/h)end
  if dragging and mp.get_time()-lastSeek>0.10 then seek_at(nativePointer.x);lastSeek=mp.get_time()end
  update_visibility()
@@ -344,7 +496,8 @@ mp.register_script_message('fua-native-button',function(nx,ny,mode)
  nx=tonumber(nx) or 0;ny=tonumber(ny) or 0
  if mode=='up' then if sliderDrag then local w,h=mp.get_osd_size();sliderDrag(nx*720*w/h);sliderDrag=nil end;if dragging then seek_at(nx);dragging=false end;update_visibility();return end
  local w,h=mp.get_osd_size();local width=720*w/h;local x,y=nx*width,ny*720
- if y>=720-89 and y<=720-48 and x>=28 and x<=width-28 and not menuKind then dragging=true;seek_at(nx);update_visibility();return end
+ if episodePanel.click(nx,ny)then update_visibility();return end
+ if y>=720-89-castLift and y<=720-48-castLift and x>=28 and x<=width-28 and not menuKind then dragging=true;seek_at(nx);update_visibility();return end
   if not visible then
   if pointer_inside() then
    local now=mp.get_time()
@@ -358,16 +511,19 @@ mp.register_script_message('fua-native-button',function(nx,ny,mode)
  end
  bodyClickAt=-10
  for i=#zones,1,-1 do local z=zones[i];if x>=z.x and x<=z.x+z.w and y>=z.y and y<=z.y+z.h then if z.slide then sliderDrag=z.slide end;z.fn(x,y);update_visibility();return end end
- if menuKind then menuKind=nil;update_visibility()end
+ if menuKind then menuKind=nil;update_visibility()
+ elseif mp.get_property_native('user-data/fua-cast-open')==true then
+  mp.set_property_native('user-data/fua-cast-open',false);controlsDismissed=true;castClosing=true;update_visibility()
+ end
 end)
 -- Clicks are delivered once by the Windows host, including child video windows.
 mp.add_forced_key_binding('MBTN_LEFT','fua-click',function()end)
 mp.add_forced_key_binding('MBTN_LEFT_DBL','fua-double',function()end)
-mp.add_forced_key_binding('ESC','fua-back',function()if menuKind then menuKind=nil;update_visibility()else host('library')end end)
+mp.add_forced_key_binding('ESC','fua-back',function()if episodePanel.open then episodePanel.open=false;update_visibility()elseif menuKind then menuKind=nil;update_visibility()else host('library')end end)
 mp.add_forced_key_binding('f','fua-full',function()host('fullscreen')end)
 mp.observe_property('pause','bool',update_visibility)
-mp.register_event('file-loaded',function()menuKind=nil;dragging=false;sliderDrag=nil;update_visibility()end)
-mp.add_periodic_timer(1/30,function()if visible then update_visibility()end end)
+mp.register_event('file-loaded',function()menuKind=nil;dragging=false;sliderDrag=nil;controlsDismissed=false;castClosing=false;castFrom=0;castAt=0;update_visibility()end)
+mp.add_periodic_timer(1/45,function()if visible then update_visibility()end end)
 mp.register_script_message('fua-hdr',function(label)hdrLabel=label;draw()end)
 mp.msg.info('Fua overlay controls loaded - native pointer and clicks v2')
 
@@ -451,7 +607,7 @@ mp.register_script_message('fua-menu-scroll',function(delta)
  trackCursor=math.max(trackOffset+1,math.min(trackOffset+trackPageSize,trackCursor));draw()
 end)
 mp.register_script_message('fua-menu-key',function(key)
- if key=='Escape' then menuKind=nil;update_visibility();return end
+ if key=='Escape' then episodePanel.open=false;menuKind=nil;update_visibility();return end
  if menuKind~='audio' and menuKind~='sub' then return end
  if key=='Enter' then local track=trackChoices[trackCursor];if track then if menuKind=='audio' then select_audio(track.id)else mp.set_property('sid',tostring(track.id))end;menuKind=nil;update_visibility()end;return end
  local step=key=='Up' and -1 or key=='Down' and 1 or key=='PageUp' and -trackPageSize or key=='PageDown' and trackPageSize or 0
@@ -477,3 +633,10 @@ mp.register_script_message('fua-stats-cycle',function()
 end)
 mp.register_script_message('fua-stats-close',closeStats)
 mp.register_event('start-file',closeStats)
+
+mp.register_script_message('fua-system-volume',function(volume,muted)
+ local nextVolume=tonumber(volume) or 100;if math.abs(nextVolume-mp.get_property_number('user-data/fua-system-volume',nextVolume))>0.05 then volumeFeedbackUntil=mp.get_time()+1.2 end
+ mp.set_property_native('user-data/fua-system-volume',nextVolume)
+ mp.set_property('user-data/fua-system-mute',muted)
+ if visible then draw()end
+end)

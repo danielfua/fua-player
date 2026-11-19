@@ -14,6 +14,21 @@ async function tmdb(route,params={}){const u=new URL('https://api.themoviedb.org
 function pickLogo(logos){const priority={pt:0,en:1};const list=logos.filter(x=>x.file_path&&x.width>=200).sort((a,b)=>(priority[a.iso_639_1]??2)-(priority[b.iso_639_1]??2)||(b.vote_average||0)-(a.vote_average||0)||(b.width||0)-(a.width||0));return list[0]?'https://image.tmdb.org/t/p/original'+list[0].file_path:null}
 function metadata(d,type){return {tmdb:d.id,title:d.title||d.name,year:(d.release_date||d.first_air_date||'').slice(0,4),synopsis:d.overview||'',logo:pickLogo(d.images?.logos||[]),poster:d.poster_path?'https://image.tmdb.org/t/p/w780'+d.poster_path:null,backdrop:d.backdrop_path?'https://image.tmdb.org/t/p/original'+d.backdrop_path:null,rating:d.vote_average||0,genres:(d.genres||[]).map(g=>g.name),runtime:d.runtime||null}}
 let trendingCache;
+const trailerCache = new Map();
+async function trailer(type,id) {
+ const cacheKey=type+'/'+id;
+ const cached=trailerCache.get(cacheKey);
+ if(cached?.expires>Date.now())return cached.value;
+ const data=await tmdb(cacheKey+'/videos',{include_video_language:'pt,en,null'});
+ const videos=(data.results||[]).filter(v=>v.site==='YouTube'&&v.type==='Trailer'&&/^[\w-]{11}$/.test(v.key));
+ const rank=v=>(v.iso_639_1==='pt'?0:v.iso_639_1==='en'?10:20)+(v.official?0:3)+(v.iso_3166_1==='BR'?0:1);
+ videos.sort((a,b)=>rank(a)-rank(b));
+ const video=videos[0];
+ const value=video?{key:video.key,name:video.name,language:video.iso_639_1,official:!!video.official}:null;
+ if(trailerCache.size>=100)trailerCache.delete(trailerCache.keys().next().value);
+ trailerCache.set(cacheKey,{value,expires:Date.now()+30*60*1000});
+ return value;
+}
 let trendingRequest;
 async function trending() {
  const credential = key();
@@ -33,11 +48,12 @@ async function trending() {
    const batch = await Promise.all(candidates.slice(i,i+4).map(async item => {
     const type = item.media_type;
     const detail = await tmdb(type+'/'+item.id,{
-     append_to_response:'images,external_ids',include_image_language:'pt,en,null'
+     append_to_response:'images,external_ids,credits',include_image_language:'pt,en,null'
     }).catch(() => ({}));
     const result = metadata({...item,...detail,overview:detail.overview||item.overview},type);
     const ratings = hasOmdb ? await enrich.omdb(detail.imdb_id || detail.external_ids?.imdb_id) : null;
-    return {...result,type,key:type+'-'+item.id,items:[],ratings};
+    const cast=(detail.credits?.cast||[]).filter(p=>Number.isSafeInteger(p.id)&&p.id>0).map(p=>({id:p.id,name:p.name,character:p.character||'',photo:p.profile_path?'https://image.tmdb.org/t/p/w185'+p.profile_path:null}));
+    return {...result,type,key:type+'-'+item.id,items:[],ratings,cast};
    }));
    titles.push(...batch);
   }
@@ -55,6 +71,8 @@ exports.enrich=async(force=false)=>require('./library-enrich.cjs').refreshMetada
 exports.parse=parse;exports.groups=groups;
 exports.api=async(req,res,url)=>{if(!url.pathname.startsWith('/api/shelf/'))return false;const reply=(code,d)=>{res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(d))};if(req.headers.host!==(process.env.FUA_ENGINE==='native'?'127.0.0.1:'+(process.env.FUA_PORT||'8768'):'127.0.0.1:8767')){reply(403,{error:'Origem não autorizada'});return true}try{
  if(url.pathname==='/api/shelf/library'&&req.method==='GET'){reply(200,{titles:groups(),job});return true}
+ const trailerRoute=url.pathname.match(/^\/api\/shelf\/trailer\/(movie|tv)\/(\d{1,12})$/);
+ if(trailerRoute&&req.method==='GET'){reply(200,{trailer:await trailer(trailerRoute[1],trailerRoute[2])});return true;}
  const ratingRoute=url.pathname.match(/^\/api\/shelf\/ratings\/(movie|tv)\/(\d{1,12})$/);
  if(ratingRoute&&req.method==='GET'){
   const [,type,id]=ratingRoute;

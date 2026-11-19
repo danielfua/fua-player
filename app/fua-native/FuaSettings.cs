@@ -86,9 +86,9 @@ partial class FuaNative {
  string DataFile(string name){return Path.Combine(DataRoot,name);}
  void Maintenance(string action){try{var request=(HttpWebRequest)WebRequest.Create("http://127.0.0.1:8780/api/maintenance/"+action);request.Method="POST";request.Headers["Origin"]="http://127.0.0.1:8780";request.ContentLength=0;request.Timeout=10000;using(var response=request.GetResponse()){} }catch{}}
  string ReadApiKey(string name){try{return Convert.ToString(json.Deserialize<Dictionary<string,object>>(File.ReadAllText(DataFile(name)))["key"]);}catch{return "";}}
- void SavePlayerPreferences(){if(mpv==IntPtr.Zero)return;try{var values=new Dictionary<string,object>();foreach(string key in new[]{"contrast","brightness","gamma","saturation","volume"})values[key]=Number(key);values["mute"]=Get("mute")=="yes";values["rtx"]=rtxRequested;File.WriteAllText(DataFile("player-settings.json"),json.Serialize(values));}catch{}}
- void LoadPlayerPreferences(){try{var values=json.Deserialize<Dictionary<string,object>>(File.ReadAllText(DataFile("player-settings.json")));foreach(string key in new[]{"contrast","brightness","gamma","saturation","volume"})if(values.ContainsKey(key)){double value=Convert.ToDouble(values[key]);value=Math.Max(key=="volume"?0:-100,Math.Min(100,value));Send("set",key,value.ToString(System.Globalization.CultureInfo.InvariantCulture));}if(values.ContainsKey("mute"))Send("set","mute",Convert.ToBoolean(values["mute"])?"yes":"no");if(values.ContainsKey("rtx"))rtxRequested=Convert.ToBoolean(values["rtx"]);if(hdrDisplay.HasValue)UpdateRtxFilter();}catch{}}
- void AppSettings(){bool paused=mpv!=IntPtr.Zero&&Get("pause")=="yes";if(mpv!=IntPtr.Zero)Send("set","pause","yes");
+ void SavePlayerPreferences(){if(mpv==IntPtr.Zero)return;try{var values=new Dictionary<string,object>();foreach(string key in new[]{"contrast","brightness","gamma","saturation"})values[key]=Number(key);values["mute"]=Get("mute")=="yes";values["rtx"]=rtxRequested;File.WriteAllText(DataFile("player-settings.json"),json.Serialize(values));}catch{}}
+ void LoadPlayerPreferences(){try{var values=json.Deserialize<Dictionary<string,object>>(File.ReadAllText(DataFile("player-settings.json")));foreach(string key in new[]{"contrast","brightness","gamma","saturation"})if(values.ContainsKey(key)){double value=Convert.ToDouble(values[key]);value=Math.Max(key=="volume"?0:-100,Math.Min(100,value));Send("set",key,value.ToString(System.Globalization.CultureInfo.InvariantCulture));}if(values.ContainsKey("rtx"))rtxRequested=Convert.ToBoolean(values["rtx"]);if(hdrDisplay.HasValue)UpdateRtxFilter();}catch{}}
+ void AppSettings(string initialPage=null){bool paused=mpv!=IntPtr.Zero&&Get("pause")=="yes";if(mpv!=IntPtr.Zero)Send("set","pause","yes");
  using(var form=new Form()){float scale;using(var graphics=CreateGraphics())scale=graphics.DpiX/96f;var work=Screen.FromControl(this).WorkingArea;form.Text="Fua Player · Configurações";form.StartPosition=FormStartPosition.CenterParent;form.AutoScaleMode=AutoScaleMode.None;form.Size=new Size(Math.Min((int)(800*scale),(int)(work.Width*.9)),Math.Min((int)(590*scale),(int)(work.Height*.9)));form.Font=new Font("Segoe UI",10);form.Icon=Icon;form.MinimumSize=new Size(Math.Min((int)(760*scale),work.Width),Math.Min((int)(560*scale),work.Height));form.BackColor=Color.FromArgb(12,18,27);form.ForeColor=Color.White;form.MinimizeBox=false;form.MaximizeBox=false;
  var accent=Color.FromArgb(143,205,243);
  var muted=Color.FromArgb(155,174,194);
@@ -137,6 +137,7 @@ partial class FuaNative {
  body.Controls.Add(contentLayout);
  var pages=new List<Panel>();
  var navigationButtons=new List<Button>();
+ form.Shown+=(sender,args)=>{if(initialPage!=null)foreach(var item in navigationButtons)if(item.Text==initialPage){item.PerformClick();break;}};
  Func<string,Panel> tab=title=>{
   var page=new Panel{Dock=DockStyle.Fill,BackColor=form.BackColor,ForeColor=Color.White,Padding=new Padding((int)(22*scale)),AutoScroll=true,Visible=false};
   host.Controls.Add(page);
@@ -296,8 +297,66 @@ partial class FuaNative {
  Action<string,string,int,int,int> number=(key,label,initial,min,max)=>{int row=previewLayout.RowCount++;var value=new NumericUpDown{Minimum=min,Maximum=max,Value=PreviewLimit(previewConfig,key,initial,min,max),Dock=DockStyle.Fill,Margin=new Padding((int)(12*scale),(int)(7*scale),0,(int)(7*scale)),BorderStyle=BorderStyle.FixedSingle,BackColor=Color.FromArgb(26,42,58),ForeColor=Color.White};previewFields[key]=value;previewLayout.Controls.Add(new Label{Text=label,AutoSize=true,Padding=new Padding(0,8,0,8)},0,row);previewLayout.Controls.Add(value,1,row);};
  number("maxMedia","Mídias no cache de capas locais",10,1,100);number("idleSeconds","Liberar prévia após inatividade (segundos)",30,5,300);number("maxHistoryMedia","Vídeos externos com retomada guardada",200,10,10000);
  var previewNote=new Label{Dock=DockStyle.Bottom,Height=(int)(100*scale),Text="A barra usa Thumbfast e mantém apenas uma imagem temporária.\nA retomada dos vídeos externos é guardada separadamente.\nAlterações da prévia passam a valer ao reabrir o player."};previewPage.Controls.Add(previewNote);
+ var voicePage=tab("Comandos de voz");
+ var voiceDescription=new Label{AutoSize=true,ForeColor=muted,Text="Edite a frase de cada ação e clique em Salvar e fechar. Volume muda 2 pontos; aumenta mais e abaixa mais mudam 5 pontos. Avanço e retorno: dez segundos.",MaximumSize=new Size((int)(460*scale),0)};
+ var voiceLayout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=3};
+ voiceLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+ voiceLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+ voiceLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+ voiceLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,(int)(65*scale)));
+ voicePage.Controls.Add(voiceLayout);
+ voiceLayout.Controls.Add(voiceDescription,0,0);
+ var voiceCommands=VoiceCommands();
+ var voiceGrid=new DataGridView{Dock=DockStyle.Fill,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=form.BackColor,BorderStyle=BorderStyle.None,EnableHeadersVisualStyles=false,CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal,GridColor=surface,Margin=new Padding(0,(int)(14*scale),0,(int)(10*scale))};
+ voiceGrid.Columns.Add("action","Ação");
+ voiceGrid.Columns.Add("phrase","Frase de voz");
+ voiceGrid.Columns[0].ReadOnly=true;
+ voiceGrid.DefaultCellStyle.BackColor=form.BackColor;voiceGrid.DefaultCellStyle.ForeColor=Color.White;
+ voiceGrid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(36,66,88);
+ voiceGrid.DefaultCellStyle.SelectionForeColor=Color.White;
+ voiceGrid.ColumnHeadersDefaultCellStyle.BackColor=surface;
+ voiceGrid.ColumnHeadersDefaultCellStyle.ForeColor=muted;
+ voiceGrid.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;voiceGrid.ColumnHeadersHeight=(int)(38*scale);voiceGrid.ColumnHeadersDefaultCellStyle.Padding=new Padding((int)(6*scale),0,0,0);voiceGrid.DefaultCellStyle.Padding=new Padding((int)(6*scale),0,0,0);voiceGrid.RowTemplate.Height=(int)(34*scale);
+ var actionLabels=new Dictionary<string,string>{{"pause","Pausar"},{"play","Continuar"},{"forward","Avançar"},{"back","Voltar"},{"volume-up","Aumentar volume"},{"volume-down","Diminuir volume"},{"volume-up-more","Aumentar volume em 5 pontos"},{"volume-down-more","Diminuir volume em 5 pontos"},{"mute","Silenciar"},{"unmute","Ativar som"},{"fullscreen","Tela cheia / janela"},{"library","Voltar à biblioteca"}};
+ foreach(var entry in voiceCommands){int row=voiceGrid.Rows.Add(actionLabels[entry.Key],entry.Value);voiceGrid.Rows[row].Tag=entry.Key;}
+ voiceLayout.Controls.Add(voiceGrid,0,1);
+ Func<Dictionary<string,string>> readVoiceCommands=()=>{
+  voiceGrid.EndEdit();
+  var draft=new Dictionary<string,string>();
+  foreach(DataGridViewRow row in voiceGrid.Rows)draft[(string)row.Tag]=Convert.ToString(row.Cells[1].Value).Trim().ToLowerInvariant();
+  ValidateVoiceCommands(draft);
+  return draft;
+ };
+ var voiceActions=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false};
+ var voiceToggle=new SettingsButton{Margin=new Padding(0,0,(int)(10*scale),0),AutoSize=false,Width=(int)(150*scale),Height=(int)(40*scale),FlatStyle=FlatStyle.Flat,Padding=new Padding((int)(10*scale),(int)(5*scale),(int)(10*scale),(int)(5*scale))};
+ Action refreshVoiceButton=()=>{
+  bool active=voiceSession!=null;
+  voiceToggle.Enabled=!voiceStarting;
+  voiceToggle.Text=voiceStarting?"Carregando…":active?"Ativado":"Desativado";
+  voiceToggle.BackColor=active?accent:surface;
+  voiceToggle.ForeColor=active?Color.FromArgb(12,28,40):muted;
+  voiceToggle.FlatAppearance.MouseOverBackColor=active?Color.FromArgb(185,226,252):Color.FromArgb(39,66,89);
+ };
+ voiceToggle.Click+=async(sender,args)=>{
+  if(voiceStarting)return;
+  if(voiceSession!=null){StopVoice();File.WriteAllText(DataFile("voice-enabled.txt"),"off");}
+  else{
+   File.WriteAllText(DataFile("voice-enabled.txt"),"on");
+   await ActivateVoice();
+   if(voiceSession==null)MessageBox.Show(form,voiceStatus,"Comandos de voz",MessageBoxButtons.OK,MessageBoxIcon.Information);
+  }
+  refreshVoiceButton();
+ };
+ voiceActions.Controls.Add(voiceToggle);
+ var voiceStateTimer=new System.Windows.Forms.Timer{Interval=300};
+ voiceStateTimer.Tick+=(sender,args)=>refreshVoiceButton();
+ refreshVoiceButton();
+ voiceStateTimer.Start();
+ form.FormClosed+=(sender,args)=>voiceStateTimer.Dispose();
+ button(voiceActions,"Restaurar padrões",()=>{var defaults=DefaultVoiceCommands();foreach(DataGridViewRow row in voiceGrid.Rows)row.Cells[1].Value=defaults[(string)row.Tag];});
+ voiceLayout.Controls.Add(voiceActions,0,2);
  var shortcutPage=tab("Teclas de atalho");
  var saveShortcutSettings=BuildShortcutSettings(form,shortcutPage,scale);
- button(actions,"Salvar e fechar",()=>{try{if(videoEdited){ParseVideoConfig(videoEditor.Text);}saveShortcutSettings();Maintenance("flush");var folders=new List<object>();foreach(DataGridViewRow row in grid.Rows)folders.Add(new{category=Convert.ToString(row.Cells[0].Value)=="Séries"?"series":"filmes",path=Convert.ToString(row.Cells[1].Value)});File.WriteAllText(DataFile("settings.json"),json.Serialize(new{folders=folders}));File.WriteAllText(DataFile("tmdb-secret.json"),json.Serialize(new{key=tmdb.Text.Trim()}));File.WriteAllText(DataFile("omdb-secret.json"),json.Serialize(new{key=omdb.Text.Trim()}));foreach(var field in previewFields)previewConfig[field.Key]=Convert.ToInt32(field.Value.Value);File.WriteAllText(DataFile("preview-settings.json"),json.Serialize(previewConfig));if(videoEdited){string temp=DataFile("video-engine.conf.tmp");File.WriteAllText(temp,videoEditor.Text);File.Copy(temp,DataFile("video-engine.conf"),true);File.Delete(temp);}File.WriteAllText(DataFile("subtitle-settings.json"),json.Serialize(new Dictionary<string,object>{{"sub-font",Convert.ToString(subtitleFont.SelectedItem)},{"sub-font-size",Convert.ToInt32(subtitleSize.Value)},{"sub-pos",Convert.ToInt32(subtitlePosition.Value)},{"sub-color",ColorTranslator.ToHtml(subtitleColor)}}));ApplySubtitleSettings();if(mpv!=IntPtr.Zero)Send("set","sub-delay",subtitleDelay.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));Maintenance("reload");form.Close();}catch(Exception ex){MessageBox.Show(form,ex.Message,"Não foi possível salvar");}});button(actions,"Cancelar",()=>form.Close());uint darkMode=1;DwmSetWindowAttribute(form.Handle,20,ref darkMode,sizeof(uint));form.ShowDialog(this);
+ button(actions,"Salvar e fechar",()=>{try{var voiceDraft=readVoiceCommands();if(videoEdited){ParseVideoConfig(videoEditor.Text);}saveShortcutSettings();bool restartVoice=voiceSession!=null||voiceStarting;File.WriteAllText(DataFile("voice-commands.json"),json.Serialize(voiceDraft));if(restartVoice){StopVoice();BeginInvoke((Action)AutoStartVoice);}Maintenance("flush");var folders=new List<object>();foreach(DataGridViewRow row in grid.Rows)folders.Add(new{category=Convert.ToString(row.Cells[0].Value)=="Séries"?"series":"filmes",path=Convert.ToString(row.Cells[1].Value)});File.WriteAllText(DataFile("settings.json"),json.Serialize(new{folders=folders}));File.WriteAllText(DataFile("tmdb-secret.json"),json.Serialize(new{key=tmdb.Text.Trim()}));File.WriteAllText(DataFile("omdb-secret.json"),json.Serialize(new{key=omdb.Text.Trim()}));foreach(var field in previewFields)previewConfig[field.Key]=Convert.ToInt32(field.Value.Value);File.WriteAllText(DataFile("preview-settings.json"),json.Serialize(previewConfig));if(videoEdited){string temp=DataFile("video-engine.conf.tmp");File.WriteAllText(temp,videoEditor.Text);File.Copy(temp,DataFile("video-engine.conf"),true);File.Delete(temp);}File.WriteAllText(DataFile("subtitle-settings.json"),json.Serialize(new Dictionary<string,object>{{"sub-font",Convert.ToString(subtitleFont.SelectedItem)},{"sub-font-size",Convert.ToInt32(subtitleSize.Value)},{"sub-pos",Convert.ToInt32(subtitlePosition.Value)},{"sub-color",ColorTranslator.ToHtml(subtitleColor)}}));ApplySubtitleSettings();if(mpv!=IntPtr.Zero)Send("set","sub-delay",subtitleDelay.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));Maintenance("reload");form.Close();}catch(Exception ex){MessageBox.Show(form,ex.Message,"Não foi possível salvar");}});button(actions,"Cancelar",()=>form.Close());uint darkMode=1;DwmSetWindowAttribute(form.Handle,20,ref darkMode,sizeof(uint));form.ShowDialog(this);
  }if(mpv!=IntPtr.Zero)Send("set","pause",paused?"yes":"no");if(libraryReady)browser.CoreWebView2.ExecuteScriptAsync("lastSignature='';load()");}
 }

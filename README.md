@@ -16,6 +16,9 @@ Player de mídia para Windows x64, com biblioteca de filmes e séries, reproduç
 * Anime4K em tempo real: A, A+A, B, B+B, C e C+A, com seletor e opção Desligado.
 * Miniaturas por Thumbfast e retomada para arquivos abertos diretamente no player.
 
+* Lista de episódios da temporada atual dentro do player, capítulos na linha do tempo e elenco com personagens.
+* Biblioteca em página única, abertura em tela cheia e comandos de voz locais opcionais em português.
+
 ## Usar a versão portátil
 
 Baixe o ZIP em [Releases](https://github.com/danielfua/fua-player/releases), extraia para uma pasta com permissão de gravação e abra **FuaPlayer.exe**. Node.js, libmpv e MediaInfo acompanham o pacote.

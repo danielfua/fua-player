@@ -22,6 +22,12 @@ jobs:
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           ./app/node.exe ./tests/backup.test.cjs
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          ./app/node.exe ./tests/episodes.test.cjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          ./app/node.exe ./tests/episode-progress.test.cjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          ./app/node.exe ./tests/playback-title.test.cjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
       - name: Build portable
         shell: powershell
         run: |

@@ -28,5 +28,23 @@
     "url": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261101/mpv-x86_64-20261101-git-48fca90e8c.7z",
     "file": "mpv-extractor.7z",
     "sha256": "7a887a10b74c1a4a7e8c29ead8300cfc610c466c4686bf9dcb92ca2f224ba110"
+  },
+  {
+    "id": "naudio",
+    "url": "https://api.nuget.org/v3-flatcontainer/naudio/1.10.0/naudio.1.10.0.nupkg",
+    "file": "voice/naudio.zip",
+    "sha256": "e4a80eed41dad794695f9c114432de4667d20bdfa80825aa94d159708cf29217"
+  },
+  {
+    "id": "vosk",
+    "url": "https://github.com/alphacep/vosk-api/releases/download/v0.3.45/vosk-win64-0.3.45.zip",
+    "file": "voice/vosk.zip",
+    "sha256": "f1dcc9cca460630f81ea8f71794f69c80bed6556d2a4e6237b5785e1d2dff34b"
+  },
+  {
+    "id": "vosk-model",
+    "url": "https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip",
+    "file": "voice/model.zip",
+    "sha256": "6e1ce909032e1afa7a88e68a3d628ecafff302bdf195befab308826c395e93b7"
   }
 ]
