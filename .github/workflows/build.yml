@@ -12,6 +12,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .deps
+          key: windows-dependencies-${{ hashFiles('dependencies.lock.json') }}
       - name: Verified dependencies
         shell: powershell
         run: ./scripts/get-dependencies.ps1
@@ -27,6 +31,8 @@ jobs:
           ./app/node.exe ./tests/episode-progress.test.cjs
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           ./app/node.exe ./tests/playback-title.test.cjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          ./app/node.exe ./tests/intro-sound.test.cjs
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
       - name: Build portable
         shell: powershell

@@ -13,9 +13,10 @@ using System.Threading.Tasks;
 class EpisodeArtwork {
  class Client:WebClient {protected override WebRequest GetWebRequest(Uri uri){var r=base.GetWebRequest(uri);r.Timeout=6000;return r;}}
  static int Main(string[] args){try{
+  Console.OutputEncoding=new System.Text.UTF8Encoding(false);
   if(args.Length==0)return 1;
   string app=Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,".."));
-  var p=new Process{StartInfo=new ProcessStartInfo(Path.Combine(app,"node.exe"),"\""+Path.Combine(app,"episode-list.cjs")+"\" \""+args[0]+"\""){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true}};
+  var p=new Process{StartInfo=new ProcessStartInfo(Path.Combine(app,"node.exe"),"\""+Path.Combine(app,"episode-list.cjs")+"\" \""+args[0]+"\" --images"){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true}};
   p.Start();string output=p.StandardOutput.ReadToEnd();p.WaitForExit();p.Dispose();
   var j=new JavaScriptSerializer();var data=j.Deserialize<Dictionary<string,object>>(output);object value;
   var people=new List<Dictionary<string,object>>();
@@ -29,8 +30,8 @@ class EpisodeArtwork {
    string id=Convert.ToString(person["id"]);if(!System.Text.RegularExpressions.Regex.IsMatch(id,"^[a-f0-9]{20}$"))return;
    string file=Path.Combine(dir,id+"-320-r12.bgra");
    if(!File.Exists(file)){
-    Uri uri;if(!person.ContainsKey("photo")||!Uri.TryCreate(Convert.ToString(person["photo"]),UriKind.Absolute,out uri)||uri.Scheme!="https"||uri.Host!="image.tmdb.org")return;
-    byte[] imageBytes;using(var client=new Client())imageBytes=client.DownloadData(uri);
+    object cachedImage;if(!person.TryGetValue("imageFile",out cachedImage)||!File.Exists(Convert.ToString(cachedImage)))return;
+    byte[] imageBytes=File.ReadAllBytes(Convert.ToString(cachedImage));
     using(var stream=new MemoryStream(imageBytes))using(var image=new Bitmap(stream))using(var b=new Bitmap(320,180,PixelFormat.Format32bppArgb)){
      using(var g=Graphics.FromImage(b))using(var clip=new GraphicsPath()){
       g.SmoothingMode=SmoothingMode.AntiAlias;g.InterpolationMode=InterpolationMode.HighQualityBicubic;
@@ -42,7 +43,7 @@ class EpisodeArtwork {
     }
    }
    person["file"]=file;
-  }catch{}});
+  }catch(Exception ex){Console.Error.WriteLine("Episode thumbnail: "+ex.GetType().Name+": "+ex.Message);}});
   Console.Write(j.Serialize(new{episodes=people}));return 0;
  }catch{return 1;}}
 }

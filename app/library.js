@@ -288,9 +288,9 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{if(selected){h
  sound.onclick=()=>{enabled=!enabled;try{localStorage.setItem('fua-intro-sound',enabled?'on':'off')}catch{}setSound();if(!enabled)stopSound()};
  full.onclick=()=>{if(window.chrome?.webview){window.chrome.webview.postMessage('fullscreen');return}if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});else document.documentElement.requestFullscreen().catch(()=>{})};
  async function signature(){if(!enabled)return;try{const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;context=new Audio();if(context.state==='suspended'){const attempt=context.resume();await Promise.race([attempt,new Promise(r=>setTimeout(r,250))]);if(context.state!=='running'){context.close().catch(()=>{});return}}if(finished)return;master=context.createGain();master.gain.value=.22;master.connect(context.destination);const now=context.currentTime+.06;
- function tone(f,start,duration,volume,type='sine'){const osc=context.createOscillator(),gain=context.createGain();osc.type=type;osc.frequency.setValueAtTime(f,now+start);gain.gain.setValueAtTime(0,now+start);gain.gain.linearRampToValueAtTime(volume,now+start+.055);gain.gain.exponentialRampToValueAtTime(.0001,now+start+duration);osc.connect(gain);gain.connect(master);osc.start(now+start);osc.stop(now+start+duration+.03)}
+ let activeTones=0;
+ function tone(f,start,duration,volume,type='sine'){const osc=context.createOscillator(),gain=context.createGain();activeTones++;osc.onended=()=>{osc.disconnect();gain.disconnect();if(--activeTones===0&&context?.state!=='closed')context.close().catch(()=>{})};osc.type=type;osc.frequency.setValueAtTime(f,now+start);gain.gain.setValueAtTime(0,now+start);gain.gain.linearRampToValueAtTime(volume,now+start+.055);gain.gain.exponentialRampToValueAtTime(.0001,now+start+duration);osc.connect(gain);gain.connect(master);osc.start(now+start);osc.stop(now+start+duration+.03)}
  tone(130.8128,0,1.5,.65);tone(261.6256,.18,1.2,.32);tone(391.9954,.48,1.45,.32);tone(659.2551,.8,1.3,.2);tone(783.9909,.81,.9,.08);
- setTimeout(()=>{if(context?.state!=='closed')context.close().catch(()=>{})},2500);
  }catch{}}
  if(new URLSearchParams(location.search).get('intro')==='preview'){intro.classList.add('intro-preview');return}
  signature();timer=setTimeout(()=>finish(false),1250);

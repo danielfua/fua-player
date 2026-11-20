@@ -1,4 +1,14 @@
-# Fua Player 2.2.0
+# Fua Player 2.2.1
+
+- Corrige o download das miniaturas dos episódios usando o motor de rede do Node.js, evitando os timeouts do downloader anterior.
+- Exibe a lista de episódios antes de terminar o download das imagens e mantém somente a temporada atual.
+- Identifica arquivos mesmo quando o caminho varia entre maiúsculas e minúsculas.
+- Preserva títulos em português e encerra o som de abertura somente depois que todas as notas terminam.
+
+Somente versão portátil para Windows x64. Extraia o ZIP e abra FuaPlayer.exe.
+Requer .NET Framework 4.8 e Microsoft Edge WebView2 Runtime. O pacote não inclui dados pessoais ou chaves de API.
+
+## Novidades da versão 2.2.0
 
 - Biblioteca em uma página, com navegação por rolagem, destaque de tela inteira e logos clicáveis.
 - Elenco no player, nomes dos personagens e seleção de episódios da temporada atual por miniaturas.

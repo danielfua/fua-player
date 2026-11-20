@@ -94,11 +94,23 @@ mp.register_event('start-file',function()generation=generation+1;panel.open=fals
 mp.register_event('file-loaded',function()
  local file=mp.get_property('path');if not file then return end
  local token=generation;panel.loading=true
- mp.command_native_async({name='subprocess',args={utils.join_path(root,'EpisodeArtwork.exe'),file},playback_only=true,capture_stdout=true,capture_stderr=true},function(ok,result)
-  if token~=generation then return end;panel.loading=false
-  if ok and result and result.status==0 then local data=utils.parse_json(result.stdout or '');panel.items=data and data.episodes or {} end
-  for i,item in ipairs(panel.items)do if item.current then panel.offset=math.max(0,math.min(maxScroll(),(i-1)*rowStep-rowStep));panel.scroll=panel.offset;break end end
-  mp.set_property_native('user-data/fua-episodes-available',#panel.items>0)
+ local function apply(data,first)
+  if token~=generation or not data or not data.episodes or #data.episodes==0 then return false end
+  panel.items=data.episodes
+  if first then for i,item in ipairs(panel.items)do if item.current then panel.offset=math.max(0,math.min(maxScroll(),(i-1)*rowStep-rowStep));panel.scroll=panel.offset;break end end end
+  mp.set_property_native('user-data/fua-episodes-available',true);return true
+ end
+ local function loadImages()
+  mp.command_native_async({name='subprocess',args={utils.join_path(root,'EpisodeArtwork.exe'),file},playback_only=true,capture_stdout=true,capture_stderr=true},function(ok,result)
+   if token~=generation then return end;panel.loading=false
+   if ok and result and result.status==0 then apply(utils.parse_json(result.stdout or ''),#panel.items==0)end
+  end)
+ end
+ -- Show available episodes before waiting for thumbnail downloads.
+ mp.command_native_async({name='subprocess',args={utils.join_path(root,'../node.exe'),utils.join_path(root,'../episode-list.cjs'),file},playback_only=true,capture_stdout=true,capture_stderr=true},function(ok,result)
+  if token~=generation then return end
+  if ok and result and result.status==0 then apply(utils.parse_json(result.stdout or ''),true)end
+  loadImages()
  end)
 end)
 mp.register_event('shutdown',hide)
