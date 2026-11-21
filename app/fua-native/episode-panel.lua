@@ -6,6 +6,9 @@ local panel={open=false,amount=0,items={},offset=0,scroll=0,loading=false}
 local overlay=mp.create_osd_overlay('ass-events');overlay.z=-1
 local generation,photos,zones,lastHover,hoverAt=0,{},{},nil,0
 local zoom={}
+local keyboard=false
+local cursor=1
+local lastPointerX,lastPointerY=nil,nil
 local lastFrame=mp.get_time()
 local rowStep=140
 local function listBottom()return 620-(mp.get_property_number and mp.get_property_number('user-data/fua-bottom-lift',0) or 0)end
@@ -20,7 +23,19 @@ end
 local function clearPhotos()for id in pairs(photos)do mp.commandv('overlay-remove',id)end;photos={}end
 local function hide()clearPhotos();overlay:remove();zones={}end
 function panel.active()return panel.open or panel.amount>.002 end
-function panel.toggle()panel.open=not panel.open end
+function panel.focus()keyboard=true;for i,item in ipairs(panel.items)do if item.current then cursor=i;break end end end
+function panel.toggle()panel.open=not panel.open;keyboard=false;if panel.open then panel.focus()end end
+function panel.key(key)
+ if not panel.open then return false end
+ if key=='Left' then panel.open=false;keyboard=false;return true end
+ if key=='Enter' then local item=panel.items[cursor];if item then if not item.current then mp.commandv('script-message','fua-host','episode:'..item.id)end;panel.open=false end;return true end
+ local step=(key=='Up' or key=='PageUp')and -1 or (key=='Down' or key=='PageDown')and 1 or 0
+ if step==0 then return true end
+ if not keyboard then panel.focus()end;cursor=math.max(1,math.min(#panel.items,cursor+step));keyboard=true
+ local top=73+(cursor-1)*rowStep
+ if top-panel.offset<73 then panel.offset=top-73 elseif top+120-panel.offset>listBottom()then panel.offset=top+120-listBottom()end
+ panel.offset=math.max(0,math.min(maxScroll(),panel.offset));return true
+end
 function panel.available()return #panel.items>0 end
 function panel.wheel(nx,ny,delta)
  local w,h=mp.get_osd_size();local W=720*w/h
@@ -39,6 +54,7 @@ function panel.click(nx,ny)
  return true
 end
 function panel.draw(visible,nx,ny)
+ if lastPointerX and (math.abs(nx-lastPointerX)>.002 or math.abs(ny-lastPointerY)>.002)then keyboard=false end;lastPointerX,lastPointerY=nx,ny
  local now=mp.get_time();local dt=math.min(.1,now-lastFrame);lastFrame=now
  panel.amount=panel.amount+((panel.open and 1 or 0)-panel.amount)*(1-math.exp(-dt*10))
  panel.scroll=panel.scroll+(panel.offset-panel.scroll)*(1-math.exp(-dt*12))
@@ -63,7 +79,7 @@ function panel.draw(visible,nx,ny)
    local bx=x+28;local bw=184;local bh=103.5;local id=48+(i%12)
    -- Cards use a 16:9 image with the title immediately below it.
    bw=176;bh=99
-   local hot=nx*W>=bx and nx*W<=bx+bw and ny*H>=y and ny*H<=y+116
+   local hot=(keyboard and cursor==i)or(not keyboard and nx*W>=bx and nx*W<=bx+bw and ny*H>=y and ny*H<=y+116)
    if hot then hovered=i end
    zoom[i]=(zoom[i]or 0)+((hot and 1 or 0)-(zoom[i]or 0))*(1-math.exp(-dt*14))
    if math.abs(zoom[i]-(hot and 1 or 0))<.002 then zoom[i]=hot and 1 or 0 end

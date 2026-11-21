@@ -1,4 +1,18 @@
-# Fua Player 2.2.1
+# Fua Player 2.3.0
+
+- HDR XP opcional, desligado ao iniciar, com ciclo sem compensação/−1/−2 pelo botão ou Shift+H.
+- Limite HDR XP em nits nos Ajustes de imagem: leitura do pico informado pelo Windows, automático e substituição manual por monitor.
+- Brilho do menu independente da compensação HDR XP; retorno às configurações anteriores ao desligar o efeito.
+- Controles proporcionais em janelas estreitas, menus de velocidade, logos de estado e bandeiras de idiomas no áudio e nas legendas.
+- Setas buscam o vídeo imediatamente em passos de cinco segundos; navegação dos ícones, menus, elenco e episódios por teclado.
+- Janela dimensionada pela mídia, inclusive ao sair da tela cheia após abrir pela biblioteca; vídeos externos abrem no tamanho correto.
+- Capturas JXL sem perdas, com data no nome, alta profundidade e informações de cor HDR preservadas.
+- Corrige desaparecimento dos comandos ao abrir Ajustes de imagem e comandos repetidos no clique da barra.
+
+Somente versão portátil para Windows x64. Extraia o ZIP e abra FuaPlayer.exe.
+O HDR XP é um efeito opcional: depende das informações do Windows/driver e pode alterar sombras. O limite em nits não mede a luminosidade física da tela.
+
+## Versão 2.2.1
 
 - Corrige o download das miniaturas dos episódios usando o motor de rede do Node.js, evitando os timeouts do downloader anterior.
 - Exibe a lista de episódios antes de terminar o download das imagens e mantém somente a temporada atual.

@@ -34,6 +34,13 @@ jobs:
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           ./app/node.exe ./tests/intro-sound.test.cjs
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+      - name: HDR and player controls regression tests
+        shell: powershell
+        run: |
+          ./app/node.exe ./tests/hdr-output.test.cjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          ./app/node.exe ./tests/player-navigation.test.cjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
       - name: Build portable
         shell: powershell
         run: |

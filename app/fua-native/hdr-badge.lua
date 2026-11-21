@@ -20,10 +20,10 @@ local function render()
  local fade=opening and math.max(0,math.min(12,math.ceil((expires-now)/.4*12))) or 12
  if not opening and not mp.get_property_native('user-data/fua-controls-visible') then clear();return end
  local w,h=mp.get_osd_size();if w<=0 or h<=0 then return end
- local scale=h/720
+ local scale=math.min(h/720,w/1280)
  local badgeHeight=(opening and (asset.kind=='hdr10plus' and 18 or 26) or (asset.kind=='hdr10plus' and 15 or 20))*scale
  local dh=math.max(1,math.floor(badgeHeight));local dw=math.max(1,math.floor(asset.width*dh/asset.height))
- local x=opening and (w-dw-85*scale) or (w-(355+(mp.get_property_native('user-data/fua-episodes-available') and 44 or 0))*scale-dw)
+ local x=opening and (w-dw-85*scale) or (w-(430+(mp.get_property_native('user-data/fua-episodes-available') and 46 or 0))*scale-dw)
  local y=opening and (49*scale-dh/2) or (h-(35+mp.get_property_number('user-data/fua-bottom-lift',0))*scale-dh/2)
  local image=fade<12 and (asset.prefix..'.fade'..fade..'.bgra') or asset.file
  local signature=table.concat({image,w,h,dw,dh,math.floor(x),math.floor(y),opening and 'top' or 'bottom'},':');if lastDraw==signature then return end;lastDraw=signature

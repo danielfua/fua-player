@@ -6,7 +6,7 @@ local function clear()if shown then mp.commandv('overlay-remove',63);shown=false
 local function render()
  if not art or not mp.get_property_native('user-data/fua-controls-visible')then clear();return end
  local w,h=mp.get_osd_size();if h<=0 then return end
- local scale=h/720;local left=390;local right=w/scale/2-90;local available=right-left;if available<45 then clear();return end
+ local scale=math.min(h/720,w/1280);local left=390;local right=w/scale/2-90;local available=right-left;if available<45 then clear();return end
  local factor=math.min(math.min(190,available)/art.width,38/art.height)*scale
  local dw,dh=math.max(1,math.floor(art.width*factor)),math.max(1,math.floor(art.height*factor))
  local lift=mp.get_property_number('user-data/fua-bottom-lift',0)

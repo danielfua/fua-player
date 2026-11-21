@@ -43,7 +43,7 @@ O aplicativo usa um serviço HTTP restrito a `127.0.0.1:8780`. Não é um servid
 
 ## Atalhos iniciais
 
-Espaço: play/pause; setas: avanço/volume; F ou F11: tela cheia; A: menu de áudio; V: menu de legendas; J: exibir/ocultar legenda; K: percorrer informações; Ctrl+K: editar atalhos. Números 1–8 ajustam contraste, brilho, gama e saturação.
+Espaço: play/pause; ←/→: busca imediata de cinco segundos; ↑/↓: barras e navegação dos controles; PgUp/PgDn: episódios; Enter: selecionar; Esc: biblioteca; H: RTX HDR; Shift+H: modos HDR XP; F ou F11: tela cheia; A: menu de áudio; V: menu de legendas; J: exibir/ocultar legenda; K: percorrer informações; Ctrl+K: editar atalhos. Números 1–8 ajustam contraste, brilho, gama e saturação.
 
 ## Licença e créditos
 
@@ -58,3 +58,11 @@ A prévia da barra usa Thumbfast com um mpv próprio, sem depender do mpv.net in
 ## Anime4K
 
 Clique em **A4K** ao lado da velocidade. O perfil ativo aparece em azul e a versão consta no menu. Inicia desligado e não altera o vídeo. A fluidez depende da GPU, resolução e perfil. SRGAN não incluído.
+
+## HDR XP e capturas
+
+O HDR XP inicia desligado. O botão ou Shift+H percorre desligado, ligado sem compensação, −1 e −2. A compensação é independente do brilho dos Ajustes de imagem. Ao desligar, o player restaura os parâmetros anteriores do HDR normal.
+
+Em **Ajustes de imagem → Limite HDR XP**, o automático usa o pico disponível para a tela. O valor informado pelo Windows é exibido separadamente e não é uma medição física. O limite manual só atua com HDR XP ligado, permite reduzir esse destino e é salvo por monitor. Em outra tela, o player usa a leitura e o ajuste próprios dela. Se a leitura não estiver disponível, isso aparece no painel.
+
+As capturas usam JXL sem perdas por padrão, com data e milissegundos no nome. PNG continua disponível no diálogo.

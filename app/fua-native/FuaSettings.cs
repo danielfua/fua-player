@@ -86,7 +86,7 @@ partial class FuaNative {
  string DataFile(string name){return Path.Combine(DataRoot,name);}
  void Maintenance(string action){try{var request=(HttpWebRequest)WebRequest.Create("http://127.0.0.1:8780/api/maintenance/"+action);request.Method="POST";request.Headers["Origin"]="http://127.0.0.1:8780";request.ContentLength=0;request.Timeout=10000;using(var response=request.GetResponse()){} }catch{}}
  string ReadApiKey(string name){try{return Convert.ToString(json.Deserialize<Dictionary<string,object>>(File.ReadAllText(DataFile(name)))["key"]);}catch{return "";}}
- void SavePlayerPreferences(){if(mpv==IntPtr.Zero)return;try{var values=new Dictionary<string,object>();foreach(string key in new[]{"contrast","brightness","gamma","saturation"})values[key]=Number(key);values["mute"]=Get("mute")=="yes";values["rtx"]=rtxRequested;File.WriteAllText(DataFile("player-settings.json"),json.Serialize(values));}catch{}}
+ void SavePlayerPreferences(){if(mpv==IntPtr.Zero)return;try{var values=new Dictionary<string,object>();foreach(string key in new[]{"contrast","brightness","gamma","saturation"})values[key]=key=="brightness"?HdrXpBaseBrightness():Number(key);values["mute"]=Get("mute")=="yes";values["rtx"]=rtxRequested;File.WriteAllText(DataFile("player-settings.json"),json.Serialize(values));}catch{}}
  void LoadPlayerPreferences(){try{var values=json.Deserialize<Dictionary<string,object>>(File.ReadAllText(DataFile("player-settings.json")));foreach(string key in new[]{"contrast","brightness","gamma","saturation"})if(values.ContainsKey(key)){double value=Convert.ToDouble(values[key]);value=Math.Max(key=="volume"?0:-100,Math.Min(100,value));Send("set",key,value.ToString(System.Globalization.CultureInfo.InvariantCulture));}if(values.ContainsKey("rtx"))rtxRequested=Convert.ToBoolean(values["rtx"]);if(hdrDisplay.HasValue)UpdateRtxFilter();}catch{}}
  void AppSettings(string initialPage=null){bool paused=mpv!=IntPtr.Zero&&Get("pause")=="yes";if(mpv!=IntPtr.Zero)Send("set","pause","yes");
  using(var form=new Form()){float scale;using(var graphics=CreateGraphics())scale=graphics.DpiX/96f;var work=Screen.FromControl(this).WorkingArea;form.Text="Fua Player · Configurações";form.StartPosition=FormStartPosition.CenterParent;form.AutoScaleMode=AutoScaleMode.None;form.Size=new Size(Math.Min((int)(800*scale),(int)(work.Width*.9)),Math.Min((int)(590*scale),(int)(work.Height*.9)));form.Font=new Font("Segoe UI",10);form.Icon=Icon;form.MinimumSize=new Size(Math.Min((int)(760*scale),work.Width),Math.Min((int)(560*scale),work.Height));form.BackColor=Color.FromArgb(12,18,27);form.ForeColor=Color.White;form.MinimizeBox=false;form.MaximizeBox=false;
@@ -224,6 +224,12 @@ partial class FuaNative {
  subtitleLayout.Controls.Add(subtitleNote,0,subtitleLayout.RowCount++);
  subtitleLayout.SetColumnSpan(subtitleNote,2);
  var videoSettings=tab("Vídeo");
+ var hdrModeRow=new FlowLayoutPanel{AutoSize=true,Dock=DockStyle.Fill,WrapContents=true,Margin=Padding.Empty};
+ hdrModeRow.Controls.Add(new Label{Text="Saída HDR",AutoSize=true,ForeColor=muted,Margin=new Padding(0,(int)(7*scale),(int)(12*scale),0)});
+ var hdrModeChoice=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=(int)(315*scale),BackColor=surface,ForeColor=Color.White};
+ hdrModeChoice.Items.AddRange(new object[]{"Automático · HDR direto quando disponível","HDR direto · processamento pela TV","HDR processado pelo Fua"});
+ hdrModeChoice.SelectedIndex=hdrOutputMode=="direct"?1:hdrOutputMode=="processed"?2:0;
+ hdrModeRow.Controls.Add(hdrModeChoice);
  var engineInfo=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,BorderStyle=BorderStyle.None,BackColor=form.BackColor,ForeColor=Color.FromArgb(207,225,240),Font=new Font("Segoe UI",10)};
  var lines=new List<string>{"Motor de vídeo · libmpv","Configurações atuais do player",""};
  if(mpv!=IntPtr.Zero){
@@ -232,7 +238,7 @@ partial class FuaNative {
    new[]{"Contexto gráfico","gpu-context"},new[]{"Decodificação configurada","hwdec"},
    new[]{"Decodificação ativa","hwdec-current"},new[]{"Ampliação","scale"},new[]{"Escala de cor","cscale"},
    new[]{"Redução","dscale"},new[]{"Mapeamento de tons","tone-mapping"},new[]{"Mapeamento de cores","gamut-mapping-mode"},
-   new[]{"Transferência de saída","target-trc"},new[]{"Pico de brilho","target-peak"},
+   new[]{"Tratamento HDR","target-colorspace-hint-mode"},new[]{"Transferência de saída","video-target-params/gamma"},new[]{"Pico de saída HDR","video-target-params/max-luma"},
    new[]{"Detecção de pico HDR","hdr-compute-peak"},new[]{"Redução de faixas de cor","deband"},
    new[]{"Sincronização de vídeo","video-sync"},new[]{"Shaders ativos","glsl-shaders"},
    new[]{"Filtros ativos","vf"},new[]{"Cache","cache"},new[]{"Buffer máximo","demuxer-max-bytes"}
@@ -274,8 +280,9 @@ partial class FuaNative {
  var videoHelp=new Label{Dock=DockStyle.Top,Height=(int)(45*scale),Text="Edite opção=valor. Salve e reabra o Fua Player para aplicar. Linhas com # são comentários.",ForeColor=muted};
  videoSettings.Controls.Add(videoHelp);
  videoHelp.BringToFront();
- var videoLayout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Margin=Padding.Empty,Padding=Padding.Empty};
+ var videoLayout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=4,Margin=Padding.Empty,Padding=Padding.Empty};
  videoLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+ videoLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
  videoLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
  videoLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
  videoLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,(int)(64*scale)));
@@ -288,9 +295,10 @@ partial class FuaNative {
  videoTextArea.Controls.Add(videoEditor);
  videoHelp.AutoSize=true;videoHelp.MaximumSize=new Size((int)(540*scale),0);videoHelp.Dock=DockStyle.Fill;videoHelp.Margin=Padding.Empty;
  videoButtons.Dock=DockStyle.Fill;videoButtons.Margin=Padding.Empty;
- videoLayout.Controls.Add(videoHelp,0,0);
- videoLayout.Controls.Add(videoTextArea,0,1);
- videoLayout.Controls.Add(videoButtons,0,2);
+ videoLayout.Controls.Add(hdrModeRow,0,0);
+ videoLayout.Controls.Add(videoHelp,0,1);
+ videoLayout.Controls.Add(videoTextArea,0,2);
+ videoLayout.Controls.Add(videoButtons,0,3);
  videoSettings.Controls.Add(videoLayout);
  videoSettings.AutoScroll=false;
  var previewPage=tab("Prévia e histórico");var previewConfig=PreviewSettings();var previewLayout=new TableLayoutPanel{Dock=DockStyle.Top,ColumnCount=2,AutoSize=true,RowCount=0};previewLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,65));previewLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));previewPage.Controls.Add(previewLayout);var previewFields=new Dictionary<string,NumericUpDown>();
@@ -357,6 +365,6 @@ partial class FuaNative {
  voiceLayout.Controls.Add(voiceActions,0,2);
  var shortcutPage=tab("Teclas de atalho");
  var saveShortcutSettings=BuildShortcutSettings(form,shortcutPage,scale);
- button(actions,"Salvar e fechar",()=>{try{var voiceDraft=readVoiceCommands();if(videoEdited){ParseVideoConfig(videoEditor.Text);}saveShortcutSettings();bool restartVoice=voiceSession!=null||voiceStarting;File.WriteAllText(DataFile("voice-commands.json"),json.Serialize(voiceDraft));if(restartVoice){StopVoice();BeginInvoke((Action)AutoStartVoice);}Maintenance("flush");var folders=new List<object>();foreach(DataGridViewRow row in grid.Rows)folders.Add(new{category=Convert.ToString(row.Cells[0].Value)=="Séries"?"series":"filmes",path=Convert.ToString(row.Cells[1].Value)});File.WriteAllText(DataFile("settings.json"),json.Serialize(new{folders=folders}));File.WriteAllText(DataFile("tmdb-secret.json"),json.Serialize(new{key=tmdb.Text.Trim()}));File.WriteAllText(DataFile("omdb-secret.json"),json.Serialize(new{key=omdb.Text.Trim()}));foreach(var field in previewFields)previewConfig[field.Key]=Convert.ToInt32(field.Value.Value);File.WriteAllText(DataFile("preview-settings.json"),json.Serialize(previewConfig));if(videoEdited){string temp=DataFile("video-engine.conf.tmp");File.WriteAllText(temp,videoEditor.Text);File.Copy(temp,DataFile("video-engine.conf"),true);File.Delete(temp);}File.WriteAllText(DataFile("subtitle-settings.json"),json.Serialize(new Dictionary<string,object>{{"sub-font",Convert.ToString(subtitleFont.SelectedItem)},{"sub-font-size",Convert.ToInt32(subtitleSize.Value)},{"sub-pos",Convert.ToInt32(subtitlePosition.Value)},{"sub-color",ColorTranslator.ToHtml(subtitleColor)}}));ApplySubtitleSettings();if(mpv!=IntPtr.Zero)Send("set","sub-delay",subtitleDelay.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));Maintenance("reload");form.Close();}catch(Exception ex){MessageBox.Show(form,ex.Message,"Não foi possível salvar");}});button(actions,"Cancelar",()=>form.Close());uint darkMode=1;DwmSetWindowAttribute(form.Handle,20,ref darkMode,sizeof(uint));form.ShowDialog(this);
+ button(actions,"Salvar e fechar",()=>{try{var voiceDraft=readVoiceCommands();if(videoEdited){ParseVideoConfig(videoEditor.Text);}saveShortcutSettings();SetHdrOutputMode(hdrModeChoice.SelectedIndex==1?"direct":hdrModeChoice.SelectedIndex==2?"processed":"auto");bool restartVoice=voiceSession!=null||voiceStarting;File.WriteAllText(DataFile("voice-commands.json"),json.Serialize(voiceDraft));if(restartVoice){StopVoice();BeginInvoke((Action)AutoStartVoice);}Maintenance("flush");var folders=new List<object>();foreach(DataGridViewRow row in grid.Rows)folders.Add(new{category=Convert.ToString(row.Cells[0].Value)=="Séries"?"series":"filmes",path=Convert.ToString(row.Cells[1].Value)});File.WriteAllText(DataFile("settings.json"),json.Serialize(new{folders=folders}));File.WriteAllText(DataFile("tmdb-secret.json"),json.Serialize(new{key=tmdb.Text.Trim()}));File.WriteAllText(DataFile("omdb-secret.json"),json.Serialize(new{key=omdb.Text.Trim()}));foreach(var field in previewFields)previewConfig[field.Key]=Convert.ToInt32(field.Value.Value);File.WriteAllText(DataFile("preview-settings.json"),json.Serialize(previewConfig));if(videoEdited){string temp=DataFile("video-engine.conf.tmp");File.WriteAllText(temp,videoEditor.Text);File.Copy(temp,DataFile("video-engine.conf"),true);File.Delete(temp);}File.WriteAllText(DataFile("subtitle-settings.json"),json.Serialize(new Dictionary<string,object>{{"sub-font",Convert.ToString(subtitleFont.SelectedItem)},{"sub-font-size",Convert.ToInt32(subtitleSize.Value)},{"sub-pos",Convert.ToInt32(subtitlePosition.Value)},{"sub-color",ColorTranslator.ToHtml(subtitleColor)}}));ApplySubtitleSettings();if(mpv!=IntPtr.Zero)Send("set","sub-delay",subtitleDelay.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));Maintenance("reload");form.Close();}catch(Exception ex){MessageBox.Show(form,ex.Message,"Não foi possível salvar");}});button(actions,"Cancelar",()=>form.Close());uint darkMode=1;DwmSetWindowAttribute(form.Handle,20,ref darkMode,sizeof(uint));form.ShowDialog(this);
  }if(mpv!=IntPtr.Zero)Send("set","pause",paused?"yes":"no");if(libraryReady)browser.CoreWebView2.ExecuteScriptAsync("lastSignature='';load()");}
 }
