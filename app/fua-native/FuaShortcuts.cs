@@ -11,7 +11,7 @@ partial class FuaNative {
  new ShortcutDefinition("pause","Play / pause",Keys.Space),new ShortcutDefinition("seek-back","Voltar 5 segundos",Keys.Left),new ShortcutDefinition("seek-forward","Avançar 5 segundos",Keys.Right),
  new ShortcutDefinition("seek-back-large","Voltar 30 segundos",Keys.Control|Keys.Left),new ShortcutDefinition("seek-forward-large","Avançar 30 segundos",Keys.Control|Keys.Right),
  new ShortcutDefinition("volume-up","Aumentar volume",Keys.Up),new ShortcutDefinition("volume-down","Diminuir volume",Keys.Down),new ShortcutDefinition("mute","Silenciar / ativar som",Keys.M),
- new ShortcutDefinition("fullscreen","Tela cheia / janela",Keys.F),new ShortcutDefinition("fullscreen-alt","Tela cheia / janela (alternativo)",Keys.F11),new ShortcutDefinition("back","Voltar à biblioteca",Keys.Escape),
+ new ShortcutDefinition("fullscreen","Tela cheia / janela",Keys.F),new ShortcutDefinition("fullscreen-alt","Tela cheia / janela (alternativo)",Keys.F11),new ShortcutDefinition("back",LiteMode?"Fechar vídeo":"Voltar à biblioteca",Keys.Escape),
  new ShortcutDefinition("audio","Abrir menu de áudio",Keys.A),new ShortcutDefinition("subtitle","Abrir menu de legendas",Keys.V),new ShortcutDefinition("subtitle-toggle","Exibir / ocultar legendas",Keys.J),
  new ShortcutDefinition("subtitle-earlier","Adiantar legenda 0,1 segundo",Keys.Z),new ShortcutDefinition("subtitle-later","Atrasar legenda 0,1 segundo",Keys.X),
  new ShortcutDefinition("speed-down","Reduzir velocidade",Keys.OemOpenBrackets),new ShortcutDefinition("speed-up","Aumentar velocidade",Keys.OemCloseBrackets),new ShortcutDefinition("speed-reset","Velocidade normal",Keys.Back),

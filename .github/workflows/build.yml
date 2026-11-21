@@ -41,6 +41,31 @@ jobs:
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           ./app/node.exe ./tests/player-navigation.test.cjs
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          ./app/node.exe ./tests/lite-ui.test.cjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+      - name: Build Lite portable
+        shell: powershell
+        run: ./scripts/build-lite-release.ps1 -Version (Get-Content -Raw LITE_VERSION).Trim()
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FuaPlayerLite-Windows-x64
+          path: |
+            dist/FuaPlayerLite-Portable-*.zip
+            dist/FuaPlayerLite-Portable-*.sha256
+      - name: Publish Lite release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version=(Get-Content -Raw LITE_VERSION).Trim()
+          $tag='lite-v'+$version
+          gh release view $tag --repo $env:GITHUB_REPOSITORY 2>$null
+          if($LASTEXITCODE -ne 0){
+            gh release create $tag --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --latest=false --title "Fua Player Lite $version" --notes-file LITE_CHANGELOG.md "dist/FuaPlayerLite-Portable-$version-Windows-x64.zip" "dist/FuaPlayerLite-Portable-$version-Windows-x64.zip.sha256"
+            if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          }
+          exit 0
       - name: Build portable
         shell: powershell
         run: |

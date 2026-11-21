@@ -1,0 +1,13 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{spawnSync}=require('node:child_process');
+const root=path.resolve(__dirname,'..');
+const executable=[process.env.FUA_MPV,path.join(root,'.deps/mpv-extractor/mpv.com'),path.join(root,'app/fua-native/runtime/mpv.exe')].find(p=>p&&fs.existsSync(p));
+assert(executable,'Set FUA_MPV to a local mpv executable');
+fs.mkdirSync(path.join(root,'.deps'),{recursive:true});
+const result=path.join(root,'.deps/lite-ui.result');
+fs.rmSync(result,{force:true});
+const run=spawnSync(executable,['--no-config','--vo=null','--ao=null','--idle=yes','--script=tests/lite-ui.lua','--msg-level=all=error'],{cwd:root,windowsHide:true,encoding:'utf8',timeout:15000});
+assert.ifError(run.error);
+assert.equal(run.status,0,run.stdout+run.stderr);
+const report=fs.readFileSync(result,'utf8');
+assert(report.startsWith('PASS:'),report);
+console.log(report);

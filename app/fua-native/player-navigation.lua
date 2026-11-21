@@ -30,7 +30,7 @@ function module.new(port)
   local shown=n.shown;n.touch()
   if not shown then n.row='timeline'
   elseif n.row=='timeline' then n.row='icons'
-  elseif n.row=='icons' then n.row='cast';port.cast(true)
+  elseif n.row=='icons' and port.castEnabled~=false then n.row='cast';port.cast(true)
   end
  end
  function n.horizontal(direction)

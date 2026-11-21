@@ -7,9 +7,18 @@ using System.Drawing;
 using System.Web.Script.Serialization;
 using System.Collections.Generic;
 using System.Threading;
+#if FUA_LITE
+using WebView2 = FuaLiteSurface;
+#else
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+#endif
 partial class FuaNative : Form {
+#if FUA_LITE
+ const bool LiteMode=true;const string AppTitle="Fua Player Lite";
+#else
+ const bool LiteMode=false;const string AppTitle="Fua Player";
+#endif
  const int ResizeEdge = 8;
  Point? videoDragStart;
  Point windowDragStart;
@@ -120,6 +129,7 @@ partial class FuaNative : Form {
   SetVideoWindowSize(width,height);
   fitExternalWindow=false;
  }
+#if !FUA_LITE
  void OpenExternalPerson(object sender,CoreWebView2NewWindowRequestedEventArgs e){
   e.Handled=true;Uri target;
   if(!Uri.TryCreate(e.Uri,UriKind.Absolute,out target)||target.Scheme!="https")return;
@@ -130,6 +140,7 @@ partial class FuaNative : Form {
   try{System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target.AbsoluteUri){UseShellExecute=true});}
   catch{browser.CoreWebView2.ExecuteScriptAsync("toast('Não foi possível abrir o navegador.')");}
  }
+#endif
  sealed class VideoPanel:Panel {public Func<bool> HideCursor;protected override void WndProc(ref Message message){if(message.Msg==0x20&&HideCursor!=null&&HideCursor()){SetCursor(IntPtr.Zero);message.Result=new IntPtr(1);return;}base.WndProc(ref message);}}
 
 [DllImport("user32.dll")]static extern bool SetForegroundWindow(IntPtr h);
@@ -159,7 +170,7 @@ partial class FuaNative : Form {
  void Send(params string[] args){if(HandleSystemVolume(args))return;IntPtr a=Marshal.AllocHGlobal((args.Length+1)*IntPtr.Size);IntPtr[] b=new IntPtr[args.Length];try{for(int i=0;i<args.Length;i++){b[i]=Utf(args[i]);Marshal.WriteIntPtr(a,i*IntPtr.Size,b[i]);}Marshal.WriteIntPtr(a,args.Length*IntPtr.Size,IntPtr.Zero);int code=cmd(mpv,0,a);if(code<0)lastError="Comando mpv recusado: "+args[0];}finally{foreach(IntPtr p in b)if(p!=IntPtr.Zero)Marshal.FreeHGlobal(p);Marshal.FreeHGlobal(a);}}
  double Number(string k){if(k=="volume"&&systemVolumeAvailable)return systemVolume;double d;return double.TryParse(Get(k),System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out d)?d:0;}
  Button Btn(string label,Action action){Button b=new Button();b.Text=label;b.AutoSize=true;b.Height=32;b.FlatStyle=FlatStyle.Flat;b.ForeColor=Color.White;b.BackColor=Color.FromArgb(30,42,54);b.Click+=(s,e)=>action();controls.Controls.Add(b);return b;}
- public FuaNative(string[] args){standalone=Array.IndexOf(args,"--standalone")>=0;bridgeMode=Array.IndexOf(args,"--bridge")>=0;Text="Fua Player";FormBorderStyle=FormBorderStyle.None;BackColor=Color.FromArgb(10,16,23);ForeColor=Color.White;Rectangle area=Screen.PrimaryScreen.WorkingArea;Size=new Size((int)(area.Width*0.92),(int)(area.Height*0.92));MinimumSize=standalone?new Size(160,90):new Size(700,420);StartPosition=FormStartPosition.CenterScreen;WindowState=FormWindowState.Normal;KeyPreview=true;Directory.CreateDirectory(DataRoot);InitShortcuts();Application.AddMessageFilter(new ShortcutFilter(this));
+ public FuaNative(string[] args){standalone=LiteMode||Array.IndexOf(args,"--standalone")>=0;bridgeMode=Array.IndexOf(args,"--bridge")>=0;Text=AppTitle;FormBorderStyle=FormBorderStyle.None;BackColor=Color.FromArgb(10,16,23);ForeColor=Color.White;Rectangle area=Screen.PrimaryScreen.WorkingArea;Size=new Size((int)(area.Width*0.92),(int)(area.Height*0.92));MinimumSize=standalone?new Size(160,90):new Size(700,420);StartPosition=FormStartPosition.CenterScreen;WindowState=FormWindowState.Normal;KeyPreview=true;Directory.CreateDirectory(DataRoot);InitShortcuts();Application.AddMessageFilter(new ShortcutFilter(this));
  PreSizeExternalWindow(args);
  UpdateWindowPadding();
  DpiChanged+=(s,e)=>UpdateWindowPadding();
@@ -173,12 +184,30 @@ partial class FuaNative : Form {
  Btn("Play / Pause",()=>Send("cycle","pause"));Btn("Audio",()=>Send("cycle","audio"));Btn("Legenda",()=>Send("cycle","sub"));Btn("RTX HDR",()=>{ToggleRtxHdr();});Btn("Tela cheia",ToggleFull);
  info.Dock=DockStyle.Bottom;info.Height=26;info.Padding=new Padding(12,3,0,0);info.ForeColor=Color.FromArgb(180,210,230);bottom.Controls.Add(info);
 
- browser.Dock=DockStyle.Fill;browser.DefaultBackgroundColor=Color.FromArgb(10,16,23);Controls.Add(browser);browser.Visible=false;Shown+=(s,e)=>{if(!standalone&&!full)ToggleFull();StartPlayer(args);BeginInvoke((Action)AutoStartVoice);BeginInvoke((Action)(()=>{FrontWindow();var startupFront=new System.Windows.Forms.Timer();int attempts=0;startupFront.Interval=500;startupFront.Tick+=(sender,eventArgs)=>{FrontWindow();if(++attempts>=2){startupFront.Stop();startupFront.Dispose();}};startupFront.Start();}));};FormClosing+=(s,e)=>{StopVoice();SaveExternal();SaveHdrXpPeaks();SavePlayerPreferences();Emit();timer.Stop();pointerTimer.Stop();SetCursor(LoadCursor(IntPtr.Zero,new IntPtr(32512)));};FormClosed+=(s,e)=>{if(mpv!=IntPtr.Zero){destroy(mpv);mpv=IntPtr.Zero;}};
+ browser.Dock=DockStyle.Fill;browser.DefaultBackgroundColor=Color.FromArgb(10,16,23);Controls.Add(browser);browser.Visible=false;Shown+=(s,e)=>{if(!standalone&&!full)ToggleFull();StartPlayer(args);
+#if FUA_LITE
+ if(!bridgeMode&&(args.Length==0||!File.Exists(args[0])))ShowLiteStart();
+#endif
+ BeginInvoke((Action)AutoStartVoice);BeginInvoke((Action)(()=>{FrontWindow();var startupFront=new System.Windows.Forms.Timer();int attempts=0;startupFront.Interval=500;startupFront.Tick+=(sender,eventArgs)=>{FrontWindow();if(++attempts>=2){startupFront.Stop();startupFront.Dispose();}};startupFront.Start();}));};FormClosing+=(s,e)=>{StopVoice();SaveExternal();SaveHdrXpPeaks();SavePlayerPreferences();Emit();timer.Stop();pointerTimer.Stop();SetCursor(LoadCursor(IntPtr.Zero,new IntPtr(32512)));};FormClosed+=(s,e)=>{if(mpv!=IntPtr.Zero){destroy(mpv);mpv=IntPtr.Zero;}};
  }
+#if !FUA_LITE
  async void InitLibrary(){try{var env=await CoreWebView2Environment.CreateAsync(null,(Environment.GetEnvironmentVariable("FUA_WEBVIEW_PROFILE")??DataFile("webview-profile")),new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required"));await browser.EnsureCoreWebView2Async(env);browser.CoreWebView2.Settings.AreDevToolsEnabled=false;browser.CoreWebView2.NewWindowRequested+=OpenExternalPerson;browser.CoreWebView2.NavigationStarting+=(s,e)=>{if(!e.Uri.StartsWith("http://127.0.0.1:8780/",StringComparison.OrdinalIgnoreCase))e.Cancel=true;};browser.CoreWebView2.WebMessageReceived+=(s,e)=>{if(!e.Source.StartsWith("http://127.0.0.1:8780/",StringComparison.OrdinalIgnoreCase))return;string msg=e.TryGetWebMessageAsString();if(msg=="drag-window")BeginLibraryDrag();if(msg=="settings")AppSettings();if(msg=="minimize")WindowState=FormWindowState.Minimized;if(msg=="close")Close();if(msg=="fullscreen")ToggleFull();};browser.CoreWebView2.NavigationCompleted+=(s,e)=>{libraryReady=e.IsSuccess;SendWindowMode();};browser.CoreWebView2.Navigate("http://127.0.0.1:8780/");ShowLibrary();}catch(Exception ex){lastError="Biblioteca: "+ex.Message;MessageBox.Show(lastError,"Fua Player");}}
+#else
+ void InitLibrary(){}
+#endif
 void FrontWindow(){if(WindowState==FormWindowState.Minimized){WindowState=FormWindowState.Normal;ShowWindow(Handle,9);}else ShowWindow(Handle,5);Show();TopMost=true;TopMost=false;BringToFront();Activate();SetForegroundWindow(Handle);}
-void ShowLibrary(){CloseCast();if(standalone){System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"..","FuaPlayer.exe"))){UseShellExecute=false});Close();return;}SetCursor(LoadCursor(IntPtr.Zero,new IntPtr(32512)));cursorHidden=false;if(mpv!=IntPtr.Zero){Send("set","pause","yes");Send("script-message","fua-stats-close");}MinimumSize=new Size(700,420);browser.Visible=true;browser.BringToFront();playback.Visible=false;libraryMode=true;Text="Fua Player";browser.Focus();FrontWindow();Emit();if(libraryReady)browser.CoreWebView2.ExecuteScriptAsync("setTimeout(()=>refreshAfterPlayback(),150)");}
-void ShowPlayback(){MinimumSize=new Size(160,90);bottom.Visible=false;browser.Visible=false;playback.Visible=true;playback.BringToFront();libraryMode=false;video.Focus();}
+void ShowLibrary(){
+#if FUA_LITE
+ ShowLiteStart();return;
+#else
+ CloseCast();if(standalone){System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"..","FuaPlayer.exe"))){UseShellExecute=false});Close();return;}SetCursor(LoadCursor(IntPtr.Zero,new IntPtr(32512)));cursorHidden=false;if(mpv!=IntPtr.Zero){Send("set","pause","yes");Send("script-message","fua-stats-close");}MinimumSize=new Size(700,420);browser.Visible=true;browser.BringToFront();playback.Visible=false;libraryMode=true;Text=AppTitle;browser.Focus();FrontWindow();Emit();if(libraryReady)browser.CoreWebView2.ExecuteScriptAsync("setTimeout(()=>refreshAfterPlayback(),150)");
+#endif
+}
+void ShowPlayback(){
+#if FUA_LITE
+ if(liteStart!=null)liteStart.Visible=false;FormBorderStyle=FormBorderStyle.None;
+#endif
+ MinimumSize=new Size(160,90);bottom.Visible=false;browser.Visible=false;playback.Visible=true;playback.BringToFront();libraryMode=false;video.Focus();}
 void ToggleFull(){
  if(!full && WindowState==FormWindowState.Maximized){WindowState=FormWindowState.Normal;return;}
  if(!full){Rectangle screen=Screen.FromControl(this).Bounds;restore=WindowState==FormWindowState.Normal?Bounds:RestoreBounds;if(restore.Width<=0||restore.Height<=0||restore.Width>=screen.Width&&restore.Height>=screen.Height){Rectangle area=Screen.FromControl(this).WorkingArea;restore=new Rectangle(area.X+area.Width/20,area.Y+area.Height/20,area.Width*9/10,area.Height*9/10);}priorBorder=FormBorderStyle;WindowState=FormWindowState.Normal;FormBorderStyle=FormBorderStyle.None;Bounds=screen;full=true;}
@@ -194,10 +223,10 @@ void ToggleFull(){
  string[][] settings={new[]{"config","no"},new[]{"screenshot-format","jxl"},new[]{"screenshot-high-bit-depth","yes"},new[]{"screenshot-tag-colorspace","yes"},new[]{"screenshot-jxl-distance","0"},new[]{"screenshot-jxl-effort","4"},new[]{"alang","pt-BR,por"},new[]{"slang","pt-BR,por"},new[]{"subs-with-matching-audio","forced"},new[]{"subs-fallback","no"},new[]{"vo","gpu-next"},new[]{"gpu-api","d3d11"},new[]{"gpu-context","d3d11"},new[]{"hwdec","d3d11va"},new[]{"wid",video.Handle.ToInt64().ToString()},new[]{"keep-open","yes"},new[]{"input-default-bindings","no"},new[]{"input-vo-keyboard","no"},new[]{"osc","no"},new[]{"cursor-autohide","always"},new[]{"target-colorspace-hint","no"},new[]{"target-trc","srgb"},new[]{"hdr-compute-peak","yes"},new[]{"tone-mapping","bt.2446a"},new[]{"gamut-mapping-mode","perceptual"},new[]{"scale","ewa_lanczossharp"},new[]{"cscale","ewa_lanczossharp"},new[]{"dscale","mitchell"},new[]{"correct-downscaling","yes"},new[]{"sigmoid-upscaling","yes"},new[]{"linear-downscaling","yes"},new[]{"deband","yes"},new[]{"deband-iterations","2"},new[]{"deband-threshold","48"},new[]{"deband-range","16"},new[]{"deband-grain","4"},new[]{"cache","auto"},new[]{"demuxer-seekable-cache","no"},new[]{"demuxer-max-bytes","768MiB"},new[]{"demuxer-max-back-bytes","256MiB"}};
  foreach(string[] kv in settings){int code=Set(kv[0],kv[1]);if(code<0)File.AppendAllText(DataFile("native.log"),"Opcao recusada: "+kv[0]+"="+kv[1]+Environment.NewLine);}
  ApplyAdvancedVideoConfig();IntPtr level=Utf("v");logs(mpv,level);Marshal.FreeHGlobal(level);if(init(mpv)<0)throw new Exception("Falha ao iniciar mpv");
- Send("load-script",Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"thumbfast.lua"));SyncSystemVolume();LoadPlayerPreferences();LoadHdrOutputMode();ApplySubtitleSettings();RefreshDisplayColor();Send("load-script",Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"fua-ui.lua"));timer.Interval=200;timer.Tick+=(s,e)=>{try{SyncSystemVolume();TickPlayer();}catch(Exception ex){lastError=ex.Message;}};timer.Start();pointerTimer.Interval=15;pointerTimer.Tick+=(s,e)=>ForwardPointer();pointerTimer.Start();if(Array.IndexOf(args,"--library")>=0)InitLibrary();if(bridgeMode){Thread t=new Thread(ReadCommands);t.IsBackground=true;t.Start();}else if(args.Length>0&&File.Exists(args[0]))Open(args[0],0);else info.Text="Abra um video. RTX HDR requer tela HDR com HDR ativo no Windows.";
+ Send("load-script",Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"thumbfast.lua"));SyncSystemVolume();LoadPlayerPreferences();LoadHdrOutputMode();ApplySubtitleSettings();RefreshDisplayColor();Send("set","user-data/fua-lite",LiteMode?"true":"false");Send("load-script",Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"fua-ui.lua"));timer.Interval=200;timer.Tick+=(s,e)=>{try{SyncSystemVolume();TickPlayer();}catch(Exception ex){lastError=ex.Message;}};timer.Start();pointerTimer.Interval=15;pointerTimer.Tick+=(s,e)=>ForwardPointer();pointerTimer.Start();if(Array.IndexOf(args,"--library")>=0)InitLibrary();if(bridgeMode){Thread t=new Thread(ReadCommands);t.IsBackground=true;t.Start();}else if(args.Length>0&&File.Exists(args[0]))Open(args[0],0);else info.Text="Abra um video. RTX HDR requer tela HDR com HDR ativo no Windows.";
  }catch(Exception ex){lastError=ex.Message;Console.WriteLine(json.Serialize(new{error=lastError}));MessageBox.Show(lastError,"Fua Player");Close();}}
  void ReadCommands(){JavaScriptSerializer inputJson=new JavaScriptSerializer();string l;while((l=Console.ReadLine())!=null){try{Dictionary<string,object> d=inputJson.Deserialize<Dictionary<string,object>>(l);BeginInvoke((Action)(()=>{string a=Convert.ToString(d["action"]);if(a=="open")Open(Convert.ToString(d["file"]),Convert.ToDouble(d["position"]),d.ContainsKey("paused") && Convert.ToBoolean(d["paused"]));if(a=="hdr-xp")ToggleHdrXp();if(a=="hdr-output")SetHdrOutputMode(Convert.ToString(d["mode"]));if(a=="shader-menu")Send("script-message","fua-open-shaders");if(a=="shader")Send("script-message","fua-shader-select",Convert.ToString(d["id"]));if(a=="preview")Send("script-message","fua-preview-test",Convert.ToString(((Dictionary<string,object>)d["request"])["seconds"],System.Globalization.CultureInfo.InvariantCulture));if(a=="front")FrontWindow();if(a=="fullscreen")ToggleFull();if(a=="menu-key")Send("script-message","fua-menu-key",Convert.ToString(d["key"]));if(a=="menu-scroll")Send("script-message","fua-menu-scroll",Convert.ToString(d["delta"]));if(a=="shortcut")InvokeShortcut(Convert.ToString(d["id"]));if(a=="audio")Send("script-message","fua-select-audio",Convert.ToString(d["id"]));if(a=="volume")Send("set","volume",Convert.ToString(d["value"]));if(a=="capture"){Send("set","pause","yes");string captureFile=Convert.ToString(d["file"]);if(string.Equals(Path.GetExtension(captureFile),".jxl",StringComparison.OrdinalIgnoreCase))SaveVideoFrame(captureFile);else Send("screenshot-to-file",captureFile,"window");}if(a=="library")ShowLibrary();if(a=="quit")Close();}));}catch{}}}
- void Open(string file,double position,bool paused=false){CloseCast();SaveExternal();if(standalone&&position<=0)position=ExternalResume(file);startPaused=paused;ShowPlayback();current=file;resume=position;ready=false;fitExternalWindow=standalone;lastError="";UpdateRtxFilter();Text="Fua Player - "+Path.GetFileName(file);Send("loadfile",file,"replace");FrontWindow();}
+ void Open(string file,double position,bool paused=false){CloseCast();SaveExternal();if(standalone&&position<=0)position=ExternalResume(file);startPaused=paused;ShowPlayback();current=file;resume=position;ready=false;fitExternalWindow=standalone;lastError="";UpdateRtxFilter();Text=AppTitle+" - "+Path.GetFileName(file);Send("loadfile",file,"replace");FrontWindow();}
  sealed class ShortcutFilter:IMessageFilter {
   readonly FuaNative owner;public ShortcutFilter(FuaNative value){owner=value;}
   public bool PreFilterMessage(ref Message message){
@@ -277,7 +306,7 @@ void ToggleFull(){
  }
 void TickPlayer(){uiMenuOpen=Get("user-data/fua-menu-open")=="true";for(int n=0;n<100;n++){IntPtr p=wait(mpv,0);Event ev=(Event)Marshal.PtrToStructure(p,typeof(Event));if(ev.id==0)break;if(ev.id==16){int count=Marshal.ReadInt32(ev.data);IntPtr argv=Marshal.ReadIntPtr(ev.data,8);if(count>=2 && Str(Marshal.ReadIntPtr(argv))=="fua-host")HandleUi(Str(Marshal.ReadIntPtr(argv,IntPtr.Size)));}if(ev.id==8){ready=true;if(resume>0){Send("seek",(resume/1000).ToString(System.Globalization.CultureInfo.InvariantCulture),"absolute+exact");resume=0;}Send("set","pause",startPaused?"yes":"no");}if(ev.id==7){ready=false;int err=Marshal.ReadInt32(ev.data,4);if(err<0)lastError="Falha ao reproduzir o arquivo: "+err;}if(ev.id==2){Log log=(Log)Marshal.PtrToStructure(ev.data,typeof(Log));string text=Str(log.text);if(rtxFilterApplied&&text.IndexOf("NVIDIA RTX Video HDR enabled",StringComparison.OrdinalIgnoreCase)>=0)rtx="RTX HDR confirmado pelo mpv";if(rtxFilterApplied&&text.IndexOf("Failed to enable NVIDIA RTX Video HDR",StringComparison.OrdinalIgnoreCase)>=0)rtx="RTX HDR indisponivel neste video";if(Str(log.level)=="error"||Str(log.level)=="warn"||Str(log.level)=="fatal")File.AppendAllText(DataFile("native.log"),Str(log.prefix)+": "+text);}}
  if(fitExternalWindow&&ready)FitVideoWindow();
- if(ready&&!libraryMode&&Get("eof-reached")=="yes"){if(standalone){Close();return;}ShowLibrary();}
+ if(ready&&!libraryMode&&Get("eof-reached")=="yes"){if(standalone){if(LiteMode)ShowLibrary();else Close();return;}ShowLibrary();}
  if(ready){double duration=Number("duration"),pos=Number("time-pos");if(!seeking&&duration>0)seek.Value=Math.Max(0,Math.Min(10000,(int)(pos/duration*10000)));string source=Get("video-params/gamma");info.Text=TimeSpan.FromSeconds(pos).ToString(@"hh\:mm\:ss")+" / "+TimeSpan.FromSeconds(duration).ToString(@"hh\:mm\:ss")+"   |   "+((source=="pq"||source=="hlg")?"Fonte HDR nativa":rtx);}
  if(ticks%5==0)RefreshDisplayColor();else UpdateRtxFilter();if(standalone&&ticks%25==0)SaveExternal();if(++ticks%2==0)Emit();}
  // JXL captures the high-depth video frame before display tone mapping.

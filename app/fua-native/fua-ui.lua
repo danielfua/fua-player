@@ -3,10 +3,13 @@ local assdraw=require 'mp.assdraw'
 local overlay=mp.create_osd_overlay('ass-events')
 local utils=require 'mp.utils'
 local scriptDir=utils.split_path(debug.getinfo(1,'S').source:gsub('^@',''))
+local liteValue=mp.get_property_native('user-data/fua-lite')
+local isLite=liteValue==true or liteValue=='true' or liteValue=='yes'
 local logoPath=utils.join_path(scriptDir,'fua-logo.bgra')
-local titleLoaded,titleError=pcall(dofile,utils.join_path(scriptDir,'title-artwork.lua'));if not titleLoaded then mp.msg.warn(tostring(titleError))end
+if not isLite then local ok,err=pcall(dofile,utils.join_path(scriptDir,'title-artwork.lua'));if not ok then mp.msg.warn(tostring(err))end end
 local badgeLoaded,badgeError=pcall(dofile,utils.join_path(scriptDir,'hdr-badge.lua'));if not badgeLoaded then mp.msg.warn(tostring(badgeError))end
-local episodePanel=dofile(utils.join_path(scriptDir,'episode-panel.lua'))
+local noop=function()return false end
+local episodePanel=isLite and {open=false,available=noop,active=noop,draw=noop,wheel=noop,click=noop,key=noop,focus=noop,toggle=noop} or dofile(utils.join_path(scriptDir,'episode-panel.lua'))
 local trackFlags=dofile(utils.join_path(scriptDir,'track-flags.lua'))
 local navigation
 local menuZones,menuIndex,menuParent,menuDraft={},1,nil,{}
@@ -166,7 +169,7 @@ local function hideCastPhotos()
  for id in pairs(castPhotos)do mp.commandv('overlay-remove',id)end;castPhotos={}
 end
 local function loadCast()
- if castLoading or castLoaded then return end
+ if isLite or castLoading or castLoaded then return end
  local path=mp.get_property('path');if not path then return end
  castLoading=true;local token=castGeneration
  mp.command_native_async({name='subprocess',args={utils.join_path(scriptDir,'CastArtwork.exe'),path},playback_only=true,capture_stdout=true,capture_stderr=true},function(ok,result)
@@ -186,12 +189,12 @@ navigation=dofile(utils.join_path(scriptDir,'player-navigation.lua')).new({
  seekRelative=function(value)mp.commandv('seek',value,'relative+exact')end,
  pause=function(value)mp.set_property_bool('pause',value)end,seek=function(value)mp.commandv('seek',value,'absolute+exact')end,
  cast=function(open)mp.set_property_native('user-data/fua-cast-open',open);if open then loadCast()end end,
- castCount=function()return math.min(18,#castPeople)end,castActivate=activateCastPerson
+ castEnabled=not isLite,castCount=function()return math.min(18,#castPeople)end,castActivate=activateCastPerson
 })
 mp.register_event('start-file',function()pendingBrightness=nil;pendingPeak=nil;navigation.reset();menuZones={};menuIndex=1;menuParent=nil;menuDraft={}end)
 mp.register_script_message('fua-cast-toggle',function(value)
  controlsDismissed=false;castClosing=false
- local open=value=='yes';mp.set_property_native('user-data/fua-cast-open',open)
+ local open=not isLite and value=='yes';mp.set_property_native('user-data/fua-cast-open',open)
  if open then loadCast()end
  if draw then draw()end
 end)
@@ -201,6 +204,7 @@ mp.register_event('shutdown',hideCastPhotos)
 local headingGeneration=0
 mp.register_event('start-file',function()headingGeneration=headingGeneration+1;mp.set_property('user-data/fua-display-title','')end)
 mp.register_event('file-loaded',function()
+ if isLite then return end
  local file=mp.get_property('path');if not file then return end;local token=headingGeneration
  mp.command_native_async({name='subprocess',args={utils.join_path(scriptDir,'../node.exe'),utils.join_path(scriptDir,'../playback-title.cjs'),file},playback_only=true,capture_stdout=true,capture_stderr=true},function(ok,result)
   if token~=headingGeneration or not ok or not result or result.status~=0 then return end
@@ -282,7 +286,7 @@ draw=function()
   return level
  end
  local function icon(x,y,name,fn,hint)
-    local hints={['≡']='Voltar à biblioteca',['♫']='Escolher áudio',['▤']='Escolher legenda',['◖']='Silenciar',['×']='Ativar som',play='Reproduzir',pause='Pausar',['↶']='Voltar 10 segundos',['↷']='Avançar 10 segundos',RTX='Ligar/desligar RTX HDR',['▣']='Salvar imagem do vídeo',['ⓘ']='Informações do vídeo',['⛶']='Tela cheia',['—']='Minimizar',['□']='Maximizar / restaurar'}
+    local hints={['≡']=(isLite and 'Fechar vídeo' or 'Voltar à biblioteca'),['♫']='Escolher áudio',['▤']='Escolher legenda',['◖']='Silenciar',['×']='Ativar som',play='Reproduzir',pause='Pausar',['↶']='Voltar 10 segundos',['↷']='Avançar 10 segundos',RTX='Ligar/desligar RTX HDR',['▣']='Salvar imagem do vídeo',['ⓘ']='Informações do vídeo',['⛶']='Tela cheia',['—']='Minimizar',['□']='Maximizar / restaurar'}
   local navId=(name=='play' or name=='pause')and 'playback' or (name=='×' or name=='◖')and 'mute' or name:match('^[%d%.]+×$')and 'speed' or name
   local focused=false
   if y>100 and name~='cast-next' and name~='cast-prev' then focused=navigation.add(navId,fn)end
@@ -405,7 +409,7 @@ draw=function()
   if draftKey then local entry=menuZones[#menuZones];entry.adjust=function(direction)menuDraft[draftKey]=math.max(minimum,math.min(maximum,value+direction))end;entry.confirm=function()if menuDraft[draftKey]~=nil then setter(menuDraft[draftKey]);menuDraft[draftKey]=nil end end end
  end
  showShade(w,h)
- icon(40,40,'←',function()host('library')end,'Voltar à biblioteca')
+ icon(40,40,'←',function()host('library')end,(isLite and 'Fechar vídeo' or 'Voltar à biblioteca'))
  icon(W-40,40,'×',function()host('close')end,'Fechar Fua Player')
  local title=mp.get_property('user-data/fua-display-title','');if title=='' then title=mp.get_property('media-title','Fua Player')end
  text(78,40,castEllipsis(title,math.max(80,W-280),20),20,4)
@@ -423,6 +427,7 @@ draw=function()
  if hover and dur>0 and not menuKind then local target=keyboardPreview and navigation.pending or dur*math.max(0,math.min(1,(mx-x1)/(x2-x1)));preview_frame(target,math.max(165,math.min(w-165,mx*w/W)),y*h/H);local chapterName=nil;for i,chapter in ipairs(chapters)do if tonumber(chapter.time) and chapter.time<=target then chapterName=chapter.title or ('Capítulo '..i)end end;local caption=time(target);if chapterName then caption=caption..' · '..chapterName end;if previewPosition then local cx=(previewPosition.x+previewWidth/2)*W/w;local top=math.max(0,previewPosition.y-previewHeight-14)*H/h;caption=castEllipsis(caption,previewWidth*W/w-16,14);captionBackground(previewPosition.x*W/w,math.max(0,top-27),previewWidth*W/w,24);text(cx,math.max(12,top-15),caption,14,5)end else hide_preview();preview.wanted=nil end
  if hover or mp.get_property_bool('pause')then circle(x1+(x2-x1)*(dur>0 and math.min(1,barPosition/dur) or 0),y+1.5,hover and 6 or 4.5,accent)end
  zone(x1,y-13,x2-x1,28,function(px)if dur>0 then mp.commandv('seek',math.max(0,math.min(1,(px-x1)/(x2-x1)))*dur,'absolute+exact')end end,'Ir para '..time(dur*math.max(0,math.min(1,(mouseX-x1)/(x2-x1)))))
+ if not isLite then
   local castOpen=mp.get_property_native('user-data/fua-cast-open')==true
  local elapsed=mp.get_time()-hintAppearedAt
  local glow=elapsed<1 and math.sin(elapsed*math.pi) or 0
@@ -432,6 +437,7 @@ draw=function()
  local sign=castOpen and -1 or 1;local center=W/2
  a:move_to(center-10,hintY-3*sign);a:line_to(center,hintY+2*sign);a:line_to(center+10,hintY-3*sign);a:line_to(center+10,hintY-1*sign);a:line_to(center,hintY+4*sign);a:line_to(center-10,hintY-1*sign);a:line_to(center-10,hintY-3*sign);a:draw_stop()
  zone(W/2-30,H-20-castLift,60,20,function()host(castOpen and 'cast-close' or 'cast-open')end,castOpen and 'Recolher elenco' or 'Rolar para baixo: elenco')
+ end
  local cy=H-35-castLift
  icon(40,cy,'≡',function()if menuKind=='main' then menuKind=nil else menuKind='main';menuX=28;menuY=H-400 end;draw()end,'Menu do player')
  icon(84,cy,'♫',function()openTracks('audio')end)
@@ -452,7 +458,7 @@ draw=function()
  icon(W-(86+(episodePanel.available() and 46 or 0)),cy,'ⓘ',function()mp.commandv('script-message','fua-stats-cycle')end)
  if episodePanel.available() then icon(W-86,cy,'episodes',function()menuKind=nil;episodePanel.toggle();draw()end,'Episódios disponíveis')end
  icon(W-40,cy,'⛶',function()host('fullscreen')end)
- 
+
  if castLift>1 then
   local top=H-castLift
   local count=math.min(18,math.max(1,math.floor((W-160)/88)));local used={}
@@ -565,7 +571,7 @@ draw=function()
  if menuKind=='main' then
   local pw=290;local px=math.max(12,math.min(W-pw-12,menuX));local py=math.max(80,math.min(H-365,menuY))
   box(px,py,pw,306,'20160F','08');text(px+18,py+25,'Menu do player',19,4)
-  local choices={{'Play / pause',function()menuKind=nil;mp.commandv('cycle','pause')end},{'Atalhos de teclado…',function()menuKind=nil;host('shortcuts')end},{'Voltar à biblioteca',function()menuKind=nil;host('library')end},{'Ajustes de imagem',function()menuKind='image';menuX=28;menuY=H-390 end},{'Áudio',function()openTracks('audio')end},{'Legendas',function()openTracks('sub')end},{'Tela cheia / restaurar',function()menuKind=nil;host('fullscreen')end},{'Salvar imagem do vídeo',function()menuKind=nil;host('screenshot')end}} 
+  local choices={{'Play / pause',function()menuKind=nil;mp.commandv('cycle','pause')end},{isLite and 'Configurações…' or 'Atalhos de teclado…',function()menuKind=nil;host(isLite and 'settings' or 'shortcuts')end},{(isLite and 'Fechar vídeo' or 'Voltar à biblioteca'),function()menuKind=nil;host('library')end},{'Ajustes de imagem',function()menuKind='image';menuX=28;menuY=H-390 end},{'Áudio',function()openTracks('audio')end},{'Legendas',function()openTracks('sub')end},{'Tela cheia / restaurar',function()menuKind=nil;host('fullscreen')end},{'Salvar imagem do vídeo',function()menuKind=nil;host('screenshot')end}}
   for i,item in ipairs(choices)do local y=py+46+(i-1)*28;local level=zone(px+12,y,pw-24,28,item[2],item[1]);text(px+20,y+14,item[1],15+level,4,level>0.08 and accent or 'FFFFFF')end
  end
 
