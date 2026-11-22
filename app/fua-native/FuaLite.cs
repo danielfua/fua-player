@@ -10,22 +10,41 @@ sealed class FuaLiteNoWeb {
 }
 partial class FuaNative {
  Panel liteStart;
+ sealed class LiteCloseButton:Button {
+  bool hover;
+  public LiteCloseButton(){SetStyle(ControlStyles.UserPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint,true);Cursor=Cursors.Hand;AccessibleName="Fechar Fua Player Lite";TabStop=true;}
+  protected override void OnMouseEnter(EventArgs e){hover=true;Invalidate();base.OnMouseEnter(e);}
+  protected override void OnMouseLeave(EventArgs e){hover=false;Invalidate();base.OnMouseLeave(e);}
+  protected override void OnPaint(PaintEventArgs e){e.Graphics.Clear(hover?Color.FromArgb(163,43,57):Parent.BackColor);e.Graphics.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;float cx=Width/2f,cy=Height/2f,r=6f*DeviceDpi/96f;using(var pen=new Pen(Color.FromArgb(218,234,244),1.7f*DeviceDpi/96f)){e.Graphics.DrawLine(pen,cx-r,cy-r,cx+r,cy+r);e.Graphics.DrawLine(pen,cx+r,cy-r,cx-r,cy+r);}if(Focused)ControlPaint.DrawFocusRectangle(e.Graphics,Rectangle.Inflate(ClientRectangle,-5,-5));}
+ }
+ sealed class LiteWelcomePanel:Panel {
+  readonly Image logo;readonly SettingsButton open;readonly LiteCloseButton close;readonly Label edition,hint;
+  public LiteWelcomePanel(Action pick,Action exit){
+   Dock=DockStyle.Fill;BackColor=Color.FromArgb(10,16,23);AllowDrop=true;DoubleBuffered=true;
+   using(var stream=typeof(FuaNative).Assembly.GetManifestResourceStream("FuaLiteLogo")){using(var image=Image.FromStream(stream))logo=new Bitmap(image);}
+   open=new SettingsButton{Text="Abrir vídeo",AccessibleName="Abrir vídeo",Font=new Font("Segoe UI",16,FontStyle.Regular,GraphicsUnit.Pixel),BackColor=Color.FromArgb(26,42,58),ForeColor=Color.White};open.FlatAppearance.MouseOverBackColor=Color.FromArgb(38,60,81);open.Click+=(s,e)=>pick();
+   close=new LiteCloseButton();close.Click+=(s,e)=>exit();
+   edition=new Label{Text="L I T E",Font=new Font("Segoe UI",12,FontStyle.Bold,GraphicsUnit.Pixel),ForeColor=Color.FromArgb(140,177,200),TextAlign=ContentAlignment.MiddleCenter};
+   hint=new Label{Text="Arraste um vídeo para a janela ou use Ctrl+O",Font=new Font("Segoe UI",14,FontStyle.Regular,GraphicsUnit.Pixel),ForeColor=Color.FromArgb(155,174,194),TextAlign=ContentAlignment.MiddleCenter};
+   Controls.Add(open);Controls.Add(close);Controls.Add(edition);Controls.Add(hint);Resize+=(s,e)=>{Arrange();Invalidate();};
+  }
+  Rectangle LogoBounds(){float scale=DeviceDpi/96f;int w=Math.Min((int)(460*scale),ClientSize.Width-80);int h=(int)Math.Round(w*207D/870);int top=(ClientSize.Height-(h+(int)(170*scale)))/2;return new Rectangle((ClientSize.Width-w)/2,Math.Max((int)(60*scale),top),w,h);}
+  void Arrange(){float scale=DeviceDpi/96f;Rectangle b=LogoBounds();edition.SetBounds(b.Left,b.Bottom+(int)(13*scale),b.Width,(int)(25*scale));open.SetBounds((ClientSize.Width-(int)(180*scale))/2,edition.Bottom+(int)(30*scale),(int)(180*scale),(int)(44*scale));hint.SetBounds(12,open.Bottom+(int)(20*scale),ClientSize.Width-24,(int)(32*scale));close.SetBounds(ClientSize.Width-(int)(48*scale),0,(int)(48*scale),(int)(42*scale));}
+  protected override void OnPaint(PaintEventArgs e){base.OnPaint(e);e.Graphics.InterpolationMode=System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;e.Graphics.DrawImage(logo,LogoBounds());}
+  protected override void Dispose(bool disposing){if(disposing)logo.Dispose();base.Dispose(disposing);}
+ }
  void AutoStartVoice(){} void StopVoice(){} void PlayLibraryEpisode(string id){}
  void PickLiteFile(){using(var dialog=new OpenFileDialog()){dialog.Filter="Vídeos|*.mkv;*.mp4;*.avi;*.webm;*.mov;*.m4v;*.ts;*.m2ts;*.wmv|Todos os arquivos|*.*";if(dialog.ShowDialog(this)==DialogResult.OK)Open(dialog.FileName,0);}}
  void ShowLiteStart(){
-  if(full)ToggleFull();FormBorderStyle=FormBorderStyle.Sizable;MinimumSize=new Size(600,360);
+  if(full)ToggleFull();FormBorderStyle=FormBorderStyle.None;MinimumSize=new Size(600,360);SetVideoWindowSize(1280,720);
   SaveExternal();CloseCast();if(mpv!=IntPtr.Zero){Send("stop");Send("script-message","fua-stats-close");}
   ready=false;current="";fitExternalWindow=false;libraryMode=false;Text=AppTitle;playback.Visible=false;browser.Visible=false;
   if(liteStart==null){
-   liteStart=new Panel{Dock=DockStyle.Fill,BackColor=Color.FromArgb(10,16,23),AllowDrop=true};
-   var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=5};layout.RowStyles.Add(new RowStyle(SizeType.Percent,50));layout.RowStyles.Add(new RowStyle(SizeType.Absolute,65));layout.RowStyles.Add(new RowStyle(SizeType.Absolute,56));layout.RowStyles.Add(new RowStyle(SizeType.Absolute,42));layout.RowStyles.Add(new RowStyle(SizeType.Percent,50));
-   layout.Controls.Add(new Label{Text=AppTitle,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.FromArgb(183,223,248),Font=new Font("Segoe UI",26,FontStyle.Bold)},0,1);
-   var open=new SettingsButton{Text="Abrir vídeo",Size=new Size(170,42),Anchor=AnchorStyles.None,BackColor=Color.FromArgb(26,42,58),ForeColor=Color.White};open.Click+=(s,e)=>PickLiteFile();layout.Controls.Add(open,0,2);
-   layout.Controls.Add(new Label{Text="Arraste um vídeo para a janela ou use Ctrl+O",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.FromArgb(155,174,194)},0,3);
-   liteStart.Controls.Add(layout);Controls.Add(liteStart);AllowDrop=true;
+   var welcome=new LiteWelcomePanel(()=>PickLiteFile(),()=>Close());liteStart=welcome;
+   Controls.Add(liteStart);AllowDrop=true;
    DragEventHandler enter=(s,e)=>{if(e.Data.GetDataPresent(DataFormats.FileDrop))e.Effect=DragDropEffects.Copy;};
    DragEventHandler drop=(s,e)=>{var files=e.Data.GetData(DataFormats.FileDrop)as string[];if(files!=null&&files.Length>0&&File.Exists(files[0]))Open(files[0],0);};
-   DragEnter+=enter;DragDrop+=drop;liteStart.DragEnter+=enter;liteStart.DragDrop+=drop;layout.AllowDrop=true;layout.DragEnter+=enter;layout.DragDrop+=drop;
+   DragEnter+=enter;DragDrop+=drop;liteStart.DragEnter+=enter;liteStart.DragDrop+=drop;
   }
   liteStart.Visible=true;liteStart.BringToFront();FrontWindow();
  }

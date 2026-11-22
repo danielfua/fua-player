@@ -412,7 +412,7 @@ draw=function()
  icon(40,40,'←',function()host('library')end,(isLite and 'Fechar vídeo' or 'Voltar à biblioteca'))
  icon(W-40,40,'×',function()host('close')end,'Fechar Fua Player')
  local title=mp.get_property('user-data/fua-display-title','');if title=='' then title=mp.get_property('media-title','Fua Player')end
- text(78,40,castEllipsis(title,math.max(80,W-280),20),20,4)
+ if not isLite then text(78,40,castEllipsis(title,math.max(80,W-280),20),20,4)end
  text(28,H-105-castLift,castEllipsis(mp.get_property('filename',mp.get_property('media-title','Fua Player')),W-56,20),20,4)
  local pos=mp.get_property_number('time-pos',0);local dur=mp.get_property_number('duration',0)
  local x1,x2,y=28,W-28,H-76-castLift

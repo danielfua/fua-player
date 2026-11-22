@@ -1,6 +1,8 @@
-param([string]$Version='1.0.0')
+﻿param([string]$Version='')
 $ErrorActionPreference='Stop'
 $root=Split-Path $PSScriptRoot -Parent
+if(!$Version){$Version=(Get-Content -Raw (Join-Path $root 'LITE_VERSION')).Trim()}
+if($Version -notmatch '^\d+\.\d+\.\d+$'){throw 'Versão inválida'}
 $app=Join-Path $root 'app'
 $dist=Join-Path $root 'dist'
 New-Item -ItemType Directory -Force $dist|Out-Null

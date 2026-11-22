@@ -49,7 +49,9 @@ local ok,err=pcall(function()
  assert(flags.country({lang='zh-Hant'})=='tw'and flags.country({lang='es-419'})=='mx','Script and regional language variants map correctly')
  assert(flags.country({id='no'})==nil and flags.country({lang='und'})==nil,'Disabled or unknown languages do not invent a flag')
  dofile('app/fua-native/fua-ui.lua');event('start-file');event('file-loaded')
- key('Down');key('Down');key('Down');assert(state().row~='cast','Lite does not expose cast navigation')
+ properties['media-title']='""'
+ key('Down');for _,overlay in ipairs(osdOverlays)do assert(not (overlay.data or ''):find('\\pos(78,40)',1,true),'Lite does not render an empty heading')end
+ key('Down');key('Down');assert(state().row~='cast','Lite does not expose cast navigation')
  assert(not properties['user-data/fua-episode-menu-open'],'Lite does not expose episodes')
  key('Escape');assert(count('script-message')>0,'Escape reaches native host')
 end)

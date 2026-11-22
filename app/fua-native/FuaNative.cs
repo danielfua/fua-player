@@ -171,6 +171,9 @@ partial class FuaNative : Form {
  double Number(string k){if(k=="volume"&&systemVolumeAvailable)return systemVolume;double d;return double.TryParse(Get(k),System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out d)?d:0;}
  Button Btn(string label,Action action){Button b=new Button();b.Text=label;b.AutoSize=true;b.Height=32;b.FlatStyle=FlatStyle.Flat;b.ForeColor=Color.White;b.BackColor=Color.FromArgb(30,42,54);b.Click+=(s,e)=>action();controls.Controls.Add(b);return b;}
  public FuaNative(string[] args){standalone=LiteMode||Array.IndexOf(args,"--standalone")>=0;bridgeMode=Array.IndexOf(args,"--bridge")>=0;Text=AppTitle;FormBorderStyle=FormBorderStyle.None;BackColor=Color.FromArgb(10,16,23);ForeColor=Color.White;Rectangle area=Screen.PrimaryScreen.WorkingArea;Size=new Size((int)(area.Width*0.92),(int)(area.Height*0.92));MinimumSize=standalone?new Size(160,90):new Size(700,420);StartPosition=FormStartPosition.CenterScreen;WindowState=FormWindowState.Normal;KeyPreview=true;Directory.CreateDirectory(DataRoot);InitShortcuts();Application.AddMessageFilter(new ShortcutFilter(this));
+#if FUA_LITE
+ if(args.Length==0||!File.Exists(args[0])){SetVideoWindowSize(1280,720);StartPosition=FormStartPosition.Manual;}
+#endif
  PreSizeExternalWindow(args);
  UpdateWindowPadding();
  DpiChanged+=(s,e)=>UpdateWindowPadding();
