@@ -1,0 +1,16 @@
+const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),assert=require('node:assert/strict');
+const dir=fs.mkdtempSync(path.join(os.tmpdir(),'fua-cast-'));process.env.FUA_DATA_DIR=dir;
+const credits=require('../app/cast-credits.cjs');
+const person=(id,character)=>({id,name:'Actor '+id,character,profile_path:'/photo.jpg'});
+(async()=>{const calls=[];const tmdb=async route=>{calls.push(route);if(route.endsWith('/episode/1/credits'))return {cast:[person(1,'Lead')],guest_stars:[person(2,'Guest'),person(1,'Second role')]};if(route.endsWith('/episode/2/credits'))return {cast:[person(3,'Next episode')]};if(route.includes('/episode/'))return {cast:[]};if(route.includes('/season/'))return {cast:[{...person(4,''),roles:[{character:'Season role'}]}]};return {cast:[{...person(5,''),roles:[{character:'Original'},{character:'Later'}]}]};};
+ let value=await credits.get(tmdb,'tv',10);assert.equal(value.scope,'series');assert.equal(value.cast[0].character,'Original / Later');
+ value=await credits.get(tmdb,'tv',10,1);assert.equal(value.scope,'season');assert.equal(value.cast[0].id,4);
+ const before=calls.length;const [first,again]=await Promise.all([credits.get(tmdb,'tv',10,1,1),credits.get(tmdb,'tv',10,1,1)]);assert.equal(calls.length,before+1);assert.deepEqual(first,again);assert.deepEqual(first.cast.map(p=>p.id),[1,2]);assert.equal(first.cast[0].character,'Lead / Second role');
+ value=await credits.get(tmdb,'tv',10,1,2);assert.equal(value.cast[0].id,3);
+ value=await credits.get(tmdb,'tv',10,1,3);assert.equal(value.scope,'season');assert.equal(value.fallback,true);
+ value=await credits.get(tmdb,'tv',10,0,1);assert.equal(value.scope,'episode');assert(calls.includes('tv/10/season/0/episode/1/credits'));
+ value=await credits.get(tmdb,'movie',20);assert.equal(value.scope,'movie');assert(calls.includes('movie/20/credits'));
+ const normalized=credits.normalize([{id:-1},{id:2,name:'A',roles:[{character:'One'},{character:'One'}]}]);assert.equal(normalized.length,1);assert.equal(normalized[0].character,'One');
+ let failures=0;const retry=async()=>{failures++;if(failures===1)throw Error('offline');return {cast:[person(9,'Restored')]}};assert.equal((await credits.get(retry,'movie',21)).scope,'none');assert.equal((await credits.get(retry,'movie',21)).cast[0].id,9);
+ assert(fs.existsSync(path.join(dir,'cast-credits.json')));console.log('PASS series/season/episode cast, guest stars, roles, specials, concurrent cache, fallback and recovery');
+})().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>fs.rmSync(dir,{recursive:true,force:true}));

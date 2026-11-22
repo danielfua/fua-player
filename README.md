@@ -17,7 +17,7 @@ Player de mídia para Windows x64, com biblioteca de filmes e séries, reproduç
 * Miniaturas por Thumbfast e retomada para arquivos abertos diretamente no player.
 
 * Lista de episódios da temporada atual dentro do player, capítulos na linha do tempo e elenco com personagens.
-* Biblioteca em página única, abertura em tela cheia e comandos de voz locais opcionais em português.
+* Biblioteca em página única e abertura em tela cheia.
 
 ## Usar a versão portátil
 
@@ -69,7 +69,7 @@ As capturas usam JXL sem perdas por padrão, com data e milissegundos no nome. P
 
 Fua Player Lite (somente reprodução)
 ----------------------------------
-A edição Lite é compilada com FUA_LITE e compartilha o mecanismo de reprodução da versão completa. Não depende de Node, WebView2 ou servidor de biblioteca. Mantém HDR XP, RTX HDR, Anime4K, áudio, legendas, prévias, capturas e retomada de arquivos locais. Recursos de catálogo, elenco, episódios e voz pertencem à edição completa.
+A edição Lite é compilada com FUA_LITE e compartilha o mecanismo de reprodução da versão completa. Não depende de Node, WebView2 ou servidor de biblioteca. Mantém HDR XP, RTX HDR, Anime4K, áudio, legendas, prévias, capturas e retomada de arquivos locais. Recursos de catálogo, elenco e episódios pertencem à edição completa.
 
 Para gerar o ZIP: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-lite-release.ps1`.
-O resultado fica em `dist/FuaPlayerLite-Portable-1.0.1-Windows-x64.zip`, com SHA256 ao lado. Extraia tudo e abra `FuaPlayerLite.exe`. Os dados ficam na pasta `data` desse pacote; use uma pasta separada da edição completa. Requer Windows x64 e .NET Framework 4.8.
+O resultado fica em `dist/FuaPlayerLite-Portable-1.0.2-Windows-x64.zip`, com SHA256 ao lado. Extraia tudo e abra `FuaPlayerLite.exe`. Os dados ficam na pasta `data` desse pacote; use uma pasta separada da edição completa. Requer Windows x64 e .NET Framework 4.8.

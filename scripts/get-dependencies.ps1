@@ -18,7 +18,3 @@ Write-Output 'Dependências verificadas e prontas.'
 Copy-Item -LiteralPath (Join-Path $cache 'mpv-extractor/mpv.exe') -Destination (Join-Path $app 'fua-native/runtime/mpv.exe') -Force
 
 Copy-Item -LiteralPath (Join-Path $cache 'naudio/lib/net35/NAudio.dll') -Destination (Join-Path $app 'fua-native/NAudio.dll') -Force
-$voice=Join-Path $app 'fua-native/voice'
-New-Item -ItemType Directory -Force $voice,(Join-Path $voice 'model')|Out-Null
-foreach($name in @('libvosk.dll','libgcc_s_seh-1.dll','libstdc++-6.dll','libwinpthread-1.dll')){Copy-Item -LiteralPath (Join-Path $cache ('vosk/vosk-win64-0.3.45/'+$name)) -Destination (Join-Path $voice $name) -Force}
-Copy-Item (Join-Path $cache 'vosk-model/vosk-model-small-pt-0.3/*') (Join-Path $voice 'model') -Recurse -Force

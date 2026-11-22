@@ -1,4 +1,4 @@
-# Fua Player Lite 1.0.1
+# Fua Player Lite 1.0.2
 
 Versão portátil para Windows x64.
 

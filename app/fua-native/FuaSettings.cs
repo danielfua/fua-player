@@ -1,7 +1,7 @@
 using System;using System.IO;using System.Collections.Generic;using System.Drawing;using System.Windows.Forms;using System.Diagnostics;using System.Net;using System.Text;using System.Threading.Tasks;
 partial class FuaNative {
  const string DefaultVideoConfig =
-  "# Configurações avançadas do Fua Player. Uma opção por linha.\r\n"+
+  "# Advanced Player configuration. One option per line.\r\n"+
   "vo=gpu-next\r\ngpu-api=d3d11\r\ngpu-context=d3d11\r\nhwdec=d3d11va\r\n"+
   "scale=ewa_lanczossharp\r\ncscale=ewa_lanczossharp\r\ndscale=mitchell\r\n"+
   "tone-mapping=bt.2446a\r\ngamut-mapping-mode=perceptual\r\nhdr-compute-peak=yes\r\n"+
@@ -22,9 +22,9 @@ partial class FuaNative {
    string line=raw.Trim();
    if(line.Length==0||line.StartsWith("#"))continue;
    int separator=line.IndexOf('=');
-   if(separator<1)throw new Exception("Linha "+number+": use opção=valor.");
+   if(separator<1)throw new Exception("Line "+number+": use option=value.");
    string name=line.Substring(0,separator).Trim(),value=line.Substring(separator+1).Trim();
-   if(!allowed.Contains(name)||value.Length==0)throw new Exception("Opção inválida na linha "+number+": "+name);
+   if(!allowed.Contains(name)||value.Length==0)throw new Exception("Invalid option on line "+number+": "+name);
    values[name]=value;
   }
   return values;
@@ -228,31 +228,14 @@ partial class FuaNative {
  var hdrModeRow=new FlowLayoutPanel{AutoSize=true,Dock=DockStyle.Fill,WrapContents=true,Margin=Padding.Empty};
  hdrModeRow.Controls.Add(new Label{Text="Saída HDR",AutoSize=true,ForeColor=muted,Margin=new Padding(0,(int)(7*scale),(int)(12*scale),0)});
  var hdrModeChoice=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=(int)(315*scale),BackColor=surface,ForeColor=Color.White};
- hdrModeChoice.Items.AddRange(new object[]{"Automático · HDR direto quando disponível","HDR direto · processamento pela TV","HDR processado pelo Fua"});
+ hdrModeChoice.Items.AddRange(new object[]{"Automático · HDR direto quando disponível","HDR direto · processamento pela TV","HDR processado pelo Player"});
  hdrModeChoice.SelectedIndex=hdrOutputMode=="direct"?1:hdrOutputMode=="processed"?2:0;
  hdrModeRow.Controls.Add(hdrModeChoice);
- var engineInfo=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,BorderStyle=BorderStyle.None,BackColor=form.BackColor,ForeColor=Color.FromArgb(207,225,240),Font=new Font("Segoe UI",10)};
- var lines=new List<string>{"Motor de vídeo · libmpv","Configurações atuais do player",""};
- if(mpv!=IntPtr.Zero){
-  foreach(var entry in new[]{
-   new[]{"Versão","mpv-version"},new[]{"Saída de vídeo","vo"},new[]{"API gráfica","gpu-api"},
-   new[]{"Contexto gráfico","gpu-context"},new[]{"Decodificação configurada","hwdec"},
-   new[]{"Decodificação ativa","hwdec-current"},new[]{"Ampliação","scale"},new[]{"Escala de cor","cscale"},
-   new[]{"Redução","dscale"},new[]{"Mapeamento de tons","tone-mapping"},new[]{"Mapeamento de cores","gamut-mapping-mode"},
-   new[]{"Tratamento HDR","target-colorspace-hint-mode"},new[]{"Transferência de saída","video-target-params/gamma"},new[]{"Pico de saída HDR","video-target-params/max-luma"},
-   new[]{"Detecção de pico HDR","hdr-compute-peak"},new[]{"Redução de faixas de cor","deband"},
-   new[]{"Sincronização de vídeo","video-sync"},new[]{"Shaders ativos","glsl-shaders"},
-   new[]{"Filtros ativos","vf"},new[]{"Cache","cache"},new[]{"Buffer máximo","demuxer-max-bytes"}
-  }){
-   string value=Get(entry[1]);
-   lines.Add(entry[0]+" · "+(string.IsNullOrEmpty(value)?"Indisponível no momento":value));
-  }
-  lines.Add("");lines.Add("RTX HDR · "+rtx);
- }
- engineInfo.Text=string.Join(Environment.NewLine,lines.ToArray());
+ var engineInfo=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,WordWrap=true,BorderStyle=BorderStyle.None,BackColor=surface,ForeColor=Color.FromArgb(207,225,240),Font=new Font("Consolas",10)};
+ engineInfo.Text=File.Exists(DataFile("video-engine.conf"))?File.ReadAllText(DataFile("video-engine.conf")):DefaultVideoConfig;
  videoSettings.Controls.Add(engineInfo);
- var videoEditor=new TextBox{Dock=DockStyle.Fill,Multiline=true,AcceptsReturn=true,AcceptsTab=true,ScrollBars=ScrollBars.Both,WordWrap=false,Visible=false,BorderStyle=BorderStyle.None,BackColor=surface,ForeColor=Color.FromArgb(207,225,240),Font=new Font("Consolas",10)};
- videoEditor.Text=File.Exists(DataFile("video-engine.conf"))?File.ReadAllText(DataFile("video-engine.conf")):DefaultVideoConfig;
+ var videoEditor=new TextBox{Dock=DockStyle.Fill,Multiline=true,AcceptsReturn=true,AcceptsTab=true,ScrollBars=ScrollBars.Vertical,WordWrap=true,Visible=false,BorderStyle=BorderStyle.None,BackColor=surface,ForeColor=Color.FromArgb(207,225,240),Font=new Font("Consolas",10)};
+ videoEditor.Text=engineInfo.Text;
  videoSettings.Controls.Add(videoEditor);
  var videoButtons=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=(int)(60*scale),Padding=new Padding(0,(int)(10*scale),0,0)};
  bool videoEdited=false;
@@ -266,19 +249,19 @@ partial class FuaNative {
   try{
    ParseVideoConfig(videoEditor.Text);
    if(videoEdited){
-    engineInfo.Text="Configuração editada · aguardando salvar"+Environment.NewLine+Environment.NewLine+videoEditor.Text;
+    engineInfo.Text=videoEditor.Text;
    }
    videoEditor.Visible=false;
    engineInfo.Visible=true;
    engineInfo.BringToFront();
   }catch(Exception error){
-   MessageBox.Show(form,error.Message,"Revise a configuração",MessageBoxButtons.OK,MessageBoxIcon.Information);
+   MessageBox.Show(form,error.Message,"Review configuration",MessageBoxButtons.OK,MessageBoxIcon.Information);
    videoEditor.Focus();
   }
  });
  videoSettings.Controls.Add(videoButtons);
  videoButtons.BringToFront();
- var videoHelp=new Label{Dock=DockStyle.Top,Height=(int)(45*scale),Text="Edite opção=valor. Salve e reabra o Fua Player para aplicar. Linhas com # são comentários.",ForeColor=muted};
+ var videoHelp=new Label{Dock=DockStyle.Top,Height=(int)(45*scale),Text="Edite opção=valor. Salve e reabra o Player para aplicar. Linhas com # são comentários.",ForeColor=muted};
  videoSettings.Controls.Add(videoHelp);
  videoHelp.BringToFront();
  var videoLayout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=4,Margin=Padding.Empty,Padding=Padding.Empty};
@@ -306,67 +289,9 @@ partial class FuaNative {
  Action<string,string,int,int,int> number=(key,label,initial,min,max)=>{int row=previewLayout.RowCount++;var value=new NumericUpDown{Minimum=min,Maximum=max,Value=PreviewLimit(previewConfig,key,initial,min,max),Dock=DockStyle.Fill,Margin=new Padding((int)(12*scale),(int)(7*scale),0,(int)(7*scale)),BorderStyle=BorderStyle.FixedSingle,BackColor=Color.FromArgb(26,42,58),ForeColor=Color.White};previewFields[key]=value;previewLayout.Controls.Add(new Label{Text=label,AutoSize=true,Padding=new Padding(0,8,0,8)},0,row);previewLayout.Controls.Add(value,1,row);};
  number("maxMedia","Mídias no cache de capas locais",10,1,100);number("idleSeconds","Liberar prévia após inatividade (segundos)",30,5,300);number("maxHistoryMedia","Vídeos externos com retomada guardada",200,10,10000);
  var previewNote=new Label{Dock=DockStyle.Bottom,Height=(int)(100*scale),Text="A barra usa Thumbfast e mantém apenas uma imagem temporária.\nA retomada dos vídeos externos é guardada separadamente.\nAlterações da prévia passam a valer ao reabrir o player."};previewPage.Controls.Add(previewNote);
- var voicePage=tab("Comandos de voz");
- var voiceDescription=new Label{AutoSize=true,ForeColor=muted,Text="Edite a frase de cada ação e clique em Salvar e fechar. Volume muda 2 pontos; aumenta mais e abaixa mais mudam 5 pontos. Avanço e retorno: dez segundos.",MaximumSize=new Size((int)(460*scale),0)};
- var voiceLayout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=3};
- voiceLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
- voiceLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
- voiceLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
- voiceLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,(int)(65*scale)));
- voicePage.Controls.Add(voiceLayout);
- voiceLayout.Controls.Add(voiceDescription,0,0);
- var voiceCommands=VoiceCommands();
- var voiceGrid=new DataGridView{Dock=DockStyle.Fill,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=form.BackColor,BorderStyle=BorderStyle.None,EnableHeadersVisualStyles=false,CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal,GridColor=surface,Margin=new Padding(0,(int)(14*scale),0,(int)(10*scale))};
- voiceGrid.Columns.Add("action","Ação");
- voiceGrid.Columns.Add("phrase","Frase de voz");
- voiceGrid.Columns[0].ReadOnly=true;
- voiceGrid.DefaultCellStyle.BackColor=form.BackColor;voiceGrid.DefaultCellStyle.ForeColor=Color.White;
- voiceGrid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(36,66,88);
- voiceGrid.DefaultCellStyle.SelectionForeColor=Color.White;
- voiceGrid.ColumnHeadersDefaultCellStyle.BackColor=surface;
- voiceGrid.ColumnHeadersDefaultCellStyle.ForeColor=muted;
- voiceGrid.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;voiceGrid.ColumnHeadersHeight=(int)(38*scale);voiceGrid.ColumnHeadersDefaultCellStyle.Padding=new Padding((int)(6*scale),0,0,0);voiceGrid.DefaultCellStyle.Padding=new Padding((int)(6*scale),0,0,0);voiceGrid.RowTemplate.Height=(int)(34*scale);
- var actionLabels=new Dictionary<string,string>{{"pause","Pausar"},{"play","Continuar"},{"forward","Avançar"},{"back","Voltar"},{"volume-up","Aumentar volume"},{"volume-down","Diminuir volume"},{"volume-up-more","Aumentar volume em 5 pontos"},{"volume-down-more","Diminuir volume em 5 pontos"},{"mute","Silenciar"},{"unmute","Ativar som"},{"fullscreen","Tela cheia / janela"},{"library","Voltar à biblioteca"}};
- foreach(var entry in voiceCommands){int row=voiceGrid.Rows.Add(actionLabels[entry.Key],entry.Value);voiceGrid.Rows[row].Tag=entry.Key;}
- voiceLayout.Controls.Add(voiceGrid,0,1);
- Func<Dictionary<string,string>> readVoiceCommands=()=>{
-  voiceGrid.EndEdit();
-  var draft=new Dictionary<string,string>();
-  foreach(DataGridViewRow row in voiceGrid.Rows)draft[(string)row.Tag]=Convert.ToString(row.Cells[1].Value).Trim().ToLowerInvariant();
-  ValidateVoiceCommands(draft);
-  return draft;
- };
- var voiceActions=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false};
- var voiceToggle=new SettingsButton{Margin=new Padding(0,0,(int)(10*scale),0),AutoSize=false,Width=(int)(150*scale),Height=(int)(40*scale),FlatStyle=FlatStyle.Flat,Padding=new Padding((int)(10*scale),(int)(5*scale),(int)(10*scale),(int)(5*scale))};
- Action refreshVoiceButton=()=>{
-  bool active=voiceSession!=null;
-  voiceToggle.Enabled=!voiceStarting;
-  voiceToggle.Text=voiceStarting?"Carregando…":active?"Ativado":"Desativado";
-  voiceToggle.BackColor=active?accent:surface;
-  voiceToggle.ForeColor=active?Color.FromArgb(12,28,40):muted;
-  voiceToggle.FlatAppearance.MouseOverBackColor=active?Color.FromArgb(185,226,252):Color.FromArgb(39,66,89);
- };
- voiceToggle.Click+=async(sender,args)=>{
-  if(voiceStarting)return;
-  if(voiceSession!=null){StopVoice();File.WriteAllText(DataFile("voice-enabled.txt"),"off");}
-  else{
-   File.WriteAllText(DataFile("voice-enabled.txt"),"on");
-   await ActivateVoice();
-   if(voiceSession==null)MessageBox.Show(form,voiceStatus,"Comandos de voz",MessageBoxButtons.OK,MessageBoxIcon.Information);
-  }
-  refreshVoiceButton();
- };
- voiceActions.Controls.Add(voiceToggle);
- var voiceStateTimer=new System.Windows.Forms.Timer{Interval=300};
- voiceStateTimer.Tick+=(sender,args)=>refreshVoiceButton();
- refreshVoiceButton();
- voiceStateTimer.Start();
- form.FormClosed+=(sender,args)=>voiceStateTimer.Dispose();
- button(voiceActions,"Restaurar padrões",()=>{var defaults=DefaultVoiceCommands();foreach(DataGridViewRow row in voiceGrid.Rows)row.Cells[1].Value=defaults[(string)row.Tag];});
- voiceLayout.Controls.Add(voiceActions,0,2);
  var shortcutPage=tab("Teclas de atalho");
  var saveShortcutSettings=BuildShortcutSettings(form,shortcutPage,scale);
- button(actions,"Salvar e fechar",()=>{try{var voiceDraft=readVoiceCommands();if(videoEdited){ParseVideoConfig(videoEditor.Text);}saveShortcutSettings();SetHdrOutputMode(hdrModeChoice.SelectedIndex==1?"direct":hdrModeChoice.SelectedIndex==2?"processed":"auto");bool restartVoice=voiceSession!=null||voiceStarting;File.WriteAllText(DataFile("voice-commands.json"),json.Serialize(voiceDraft));if(restartVoice){StopVoice();BeginInvoke((Action)AutoStartVoice);}Maintenance("flush");var folders=new List<object>();foreach(DataGridViewRow row in grid.Rows)folders.Add(new{category=Convert.ToString(row.Cells[0].Value)=="Séries"?"series":"filmes",path=Convert.ToString(row.Cells[1].Value)});File.WriteAllText(DataFile("settings.json"),json.Serialize(new{folders=folders}));File.WriteAllText(DataFile("tmdb-secret.json"),json.Serialize(new{key=tmdb.Text.Trim()}));File.WriteAllText(DataFile("omdb-secret.json"),json.Serialize(new{key=omdb.Text.Trim()}));foreach(var field in previewFields)previewConfig[field.Key]=Convert.ToInt32(field.Value.Value);File.WriteAllText(DataFile("preview-settings.json"),json.Serialize(previewConfig));if(videoEdited){string temp=DataFile("video-engine.conf.tmp");File.WriteAllText(temp,videoEditor.Text);File.Copy(temp,DataFile("video-engine.conf"),true);File.Delete(temp);}File.WriteAllText(DataFile("subtitle-settings.json"),json.Serialize(new Dictionary<string,object>{{"sub-font",Convert.ToString(subtitleFont.SelectedItem)},{"sub-font-size",Convert.ToInt32(subtitleSize.Value)},{"sub-pos",Convert.ToInt32(subtitlePosition.Value)},{"sub-color",ColorTranslator.ToHtml(subtitleColor)}}));ApplySubtitleSettings();if(mpv!=IntPtr.Zero)Send("set","sub-delay",subtitleDelay.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));Maintenance("reload");form.Close();}catch(Exception ex){MessageBox.Show(form,ex.Message,"Não foi possível salvar");}});button(actions,"Cancelar",()=>form.Close());uint darkMode=1;DwmSetWindowAttribute(form.Handle,20,ref darkMode,sizeof(uint));form.ShowDialog(this);
+ button(actions,"Salvar e fechar",()=>{try{if(videoEdited){ParseVideoConfig(videoEditor.Text);}saveShortcutSettings();SetHdrOutputMode(hdrModeChoice.SelectedIndex==1?"direct":hdrModeChoice.SelectedIndex==2?"processed":"auto");Maintenance("flush");var folders=new List<object>();foreach(DataGridViewRow row in grid.Rows)folders.Add(new{category=Convert.ToString(row.Cells[0].Value)=="Séries"?"series":"filmes",path=Convert.ToString(row.Cells[1].Value)});File.WriteAllText(DataFile("settings.json"),json.Serialize(new{folders=folders}));File.WriteAllText(DataFile("tmdb-secret.json"),json.Serialize(new{key=tmdb.Text.Trim()}));File.WriteAllText(DataFile("omdb-secret.json"),json.Serialize(new{key=omdb.Text.Trim()}));foreach(var field in previewFields)previewConfig[field.Key]=Convert.ToInt32(field.Value.Value);File.WriteAllText(DataFile("preview-settings.json"),json.Serialize(previewConfig));if(videoEdited){string temp=DataFile("video-engine.conf.tmp");File.WriteAllText(temp,videoEditor.Text);File.Copy(temp,DataFile("video-engine.conf"),true);File.Delete(temp);}File.WriteAllText(DataFile("subtitle-settings.json"),json.Serialize(new Dictionary<string,object>{{"sub-font",Convert.ToString(subtitleFont.SelectedItem)},{"sub-font-size",Convert.ToInt32(subtitleSize.Value)},{"sub-pos",Convert.ToInt32(subtitlePosition.Value)},{"sub-color",ColorTranslator.ToHtml(subtitleColor)}}));ApplySubtitleSettings();if(mpv!=IntPtr.Zero)Send("set","sub-delay",subtitleDelay.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));Maintenance("reload");form.Close();}catch(Exception ex){MessageBox.Show(form,ex.Message,"Não foi possível salvar");}});button(actions,"Cancelar",()=>form.Close());uint darkMode=1;DwmSetWindowAttribute(form.Handle,20,ref darkMode,sizeof(uint));form.ShowDialog(this);
  }if(mpv!=IntPtr.Zero)Send("set","pause",paused?"yes":"no");if(libraryReady)browser.CoreWebView2.ExecuteScriptAsync("lastSignature='';load()");}
 #endif
 }

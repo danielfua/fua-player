@@ -48,11 +48,11 @@ async function trending() {
    const batch = await Promise.all(candidates.slice(i,i+4).map(async item => {
     const type = item.media_type;
     const detail = await tmdb(type+'/'+item.id,{
-     append_to_response:'images,external_ids,credits',include_image_language:'pt,en,null'
+     append_to_response:type==='tv'?'images,external_ids,aggregate_credits':'images,external_ids,credits',include_image_language:'pt,en,null'
     }).catch(() => ({}));
     const result = metadata({...item,...detail,overview:detail.overview||item.overview},type);
     const ratings = hasOmdb ? await enrich.omdb(detail.imdb_id || detail.external_ids?.imdb_id) : null;
-    const cast=(detail.credits?.cast||[]).filter(p=>Number.isSafeInteger(p.id)&&p.id>0).map(p=>({id:p.id,name:p.name,character:p.character||'',photo:p.profile_path?'https://image.tmdb.org/t/p/w185'+p.profile_path:null}));
+    const cast=require('./cast-credits.cjs').normalize((type==='tv'?detail.aggregate_credits:detail.credits)?.cast||[]);
     return {...result,type,key:type+'-'+item.id,items:[],ratings,cast};
    }));
    titles.push(...batch);
@@ -68,7 +68,7 @@ function score(d,g){const a=fold(g.title).split(' ').filter(s=>s.length>1),b=fol
 function save(){fs.writeFileSync(file,JSON.stringify(cache))}
 async function scan(force=false){if(job.running)return;const candidates=groups().filter(g=>g.type!=='video'&&(force&&!cache[g.key]?.manual||!cache[g.key]));job={running:true,done:0,total:candidates.length,error:null};let cursor=0;async function worker(){while(cursor<candidates.length){const g=candidates[cursor++];try{const data=await tmdb('search/'+g.type,{query:g.title});const results=(data.results||[]).sort((a,b)=>score(b,g)-score(a,g));const best=results[0];if(best&&score(best,g)>=.65){const d=await tmdb(g.type+'/'+best.id,{append_to_response:'images',include_image_language:'pt,en,null'});cache[g.key]={metadata:metadata(d,g.type),checked:Date.now()}}else cache[g.key]={metadata:null,checked:Date.now()};save()}catch{job.error='Alguns títulos ficaram sem identificação. Você pode tentar novamente.'}job.done++}}try{await Promise.all([worker(),worker(),worker()])}finally{try{await exports.enrich(force)}catch{}job.running=false}}
 exports.enrich=async(force=false)=>require('./library-enrich.cjs').refreshMetadata(groups(),tmdb,force);
-exports.parse=parse;exports.groups=groups;
+exports.parse=parse;exports.groups=groups;exports.tmdb=tmdb;
 exports.api=async(req,res,url)=>{if(!url.pathname.startsWith('/api/shelf/'))return false;const reply=(code,d)=>{res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(d))};if(req.headers.host!==(process.env.FUA_ENGINE==='native'?'127.0.0.1:'+(process.env.FUA_PORT||'8768'):'127.0.0.1:8767')){reply(403,{error:'Origem não autorizada'});return true}try{
  if(url.pathname==='/api/shelf/library'&&req.method==='GET'){reply(200,{titles:groups(),job});return true}
  const trailerRoute=url.pathname.match(/^\/api\/shelf\/trailer\/(movie|tv)\/(\d{1,12})$/);
@@ -90,8 +90,8 @@ exports.api=async(req,res,url)=>{if(!url.pathname.startsWith('/api/shelf/'))retu
   reply(200,{titles:await trending()});return true;
  }
  if(url.pathname==='/api/shelf/scan'&&req.method==='POST'){if(!['http://127.0.0.1:8767','http://127.0.0.1:8768','http://127.0.0.1:8769','http://127.0.0.1:8780'].includes(req.headers.origin)){reply(403,{error:'Origem não autorizada'});return true}scan(url.searchParams.get('retry')==='1').catch(()=>{});reply(202,{started:true});return true}
- const match=url.pathname.match(/^\/api\/shelf\/([a-f0-9]{16})\/season\/(\d{1,2})$/);if(match&&req.method==='GET'){const g=groups().find(g=>g.key===match[1]);if(!g||g.type!=='tv'||!g.tmdb){reply(200,{episodes:[]});return true}const d=await tmdb('tv/'+g.tmdb+'/season/'+Number(match[2]));reply(200,{episodes:(d.episodes||[]).map(e=>({episode:e.episode_number,title:e.name,synopsis:e.overview,runtime:e.runtime,still:e.still_path?'https://image.tmdb.org/t/p/w780'+e.still_path:null}))});return true}
- const detail=url.pathname.match(/^\/api\/shelf\/([a-f0-9]{16})\/extra$/);if(detail&&req.method==='GET'){reply(200,require('./library-enrich.cjs').title(detail[1])||{});return true}
+ const match=url.pathname.match(/^\/api\/shelf\/([a-f0-9]{16})\/season\/(\d{1,2})$/);if(match&&req.method==='GET'){const g=groups().find(g=>g.key===match[1]);if(!g||g.type!=='tv'||!g.tmdb){reply(200,{episodes:[]});return true}const d=await tmdb('tv/'+g.tmdb+'/season/'+Number(match[2]));const castInfo=await require('./cast-credits.cjs').get(tmdb,'tv',g.tmdb,Number(match[2]));reply(200,{...castInfo,episodes:(d.episodes||[]).map(e=>({episode:e.episode_number,title:e.name,synopsis:e.overview,runtime:e.runtime,still:e.still_path?'https://image.tmdb.org/t/p/w780'+e.still_path:null}))});return true}
+ const detail=url.pathname.match(/^\/api\/shelf\/([a-f0-9]{16})\/extra$/);if(detail&&req.method==='GET'){const stored=require('./library-enrich.cjs').title(detail[1])||{};const g=groups().find(g=>g.key===detail[1]);const credits=g?.tmdb?await require('./cast-credits.cjs').get(tmdb,g.type,g.tmdb):{};reply(200,{...stored,...credits,updated:stored.updated||Date.now()});return true}
  const tech=url.pathname.match(/^\/api\/shelf\/file\/([a-f0-9]{20})$/);if(tech&&req.method==='GET'){reply(200,await require('./library-enrich.cjs').technical(tech[1],media));return true}
  reply(404,{error:'Não encontrado'});
  }catch{reply(500,{error:'Não foi possível carregar a biblioteca agora.'})}return true};

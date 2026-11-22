@@ -147,6 +147,8 @@ local previewWidth=math.floor(math.max(240,math.min(960,tonumber(previewSettings
 local preview={wanted=nil}
 local draw
 local castPeople,castLoading,castLoaded,castGeneration,castOffset={},false,false,0,0
+local castScope,castFallback="",false
+local castAttempts,castRetry=0,nil
 local castLift,castPhotos,castScroll=0,{},0
 local castFrom,castAt=0,0
 local controlsDismissed,castClosing=false,false
@@ -168,14 +170,23 @@ end
 local function hideCastPhotos()
  for id in pairs(castPhotos)do mp.commandv('overlay-remove',id)end;castPhotos={}
 end
-local function loadCast()
+local loadCast
+loadCast=function()
  if isLite or castLoading or castLoaded then return end
  local path=mp.get_property('path');if not path then return end
- castLoading=true;local token=castGeneration
+ castLoading=true;castAttempts=castAttempts+1;local token=castGeneration
  mp.command_native_async({name='subprocess',args={utils.join_path(scriptDir,'CastArtwork.exe'),path},playback_only=true,capture_stdout=true,capture_stderr=true},function(ok,result)
   if token~=castGeneration then return end
   castLoading=false;castLoaded=true
-  if ok and result and result.status==0 then local data=utils.parse_json(result.stdout or '');castPeople=data and data.cast or {} end
+  local data=ok and result and result.status==0 and utils.parse_json(result.stdout or '')or nil
+  local retry=data==nil or type(data.cast)~='table'
+  if data and type(data.cast)=='table' then
+   castPeople=data.cast;castScope=data.scope or '';castFallback=data.fallback or false
+   for _,person in ipairs(castPeople)do if type(person.photo)=='string' and person.photo:match('^https://image%.tmdb%.org/') and not person.file then retry=true;break end end
+  end
+  if retry and castAttempts<4 then
+   castRetry=mp.add_timeout(({2,5,10})[castAttempts],function()castRetry=nil;if token~=castGeneration then return end;castLoaded=false;loadCast()end)
+  end
   if draw then draw()end
  end)
 end
@@ -198,7 +209,7 @@ mp.register_script_message('fua-cast-toggle',function(value)
  if open then loadCast()end
  if draw then draw()end
 end)
-mp.register_event('start-file',function()castGeneration=castGeneration+1;castPeople={};castLoading=false;castLoaded=false;castOffset=0;castScroll=0;castLift=0;hideCastPhotos();mp.set_property_native('user-data/fua-cast-open',false);mp.set_property_number('user-data/fua-bottom-lift',0)end)
+mp.register_event('start-file',function()castGeneration=castGeneration+1;if castRetry then castRetry:kill();castRetry=nil end;castAttempts=0;castScope="";castFallback=false;castPeople={};castLoading=false;castLoaded=false;castOffset=0;castScroll=0;castLift=0;hideCastPhotos();mp.set_property_native('user-data/fua-cast-open',false);mp.set_property_number('user-data/fua-bottom-lift',0)end)
 mp.register_event('file-loaded',loadCast)
 mp.register_event('shutdown',hideCastPhotos)
 local headingGeneration=0
@@ -461,6 +472,9 @@ draw=function()
 
  if castLift>1 then
   local top=H-castLift
+  local label=castLoading and "Carregando elenco…" or castScope=="episode" and "Elenco do episódio" or castScope=="season" and "Elenco da temporada" or castScope=="series" and "Elenco geral da série" or "Elenco"
+  if castFallback then label=label.." · alternativa"end
+  text(W/2,top+8,label,10,5)
   local count=math.min(18,math.max(1,math.floor((W-160)/88)));local used={}
   local rowWidth=math.min(count,#castPeople)*88
   local start=(W-rowWidth)/2
@@ -569,9 +583,9 @@ draw=function()
   text(px+pw/2,py+331,'Restaurar padrão',14,5)
  end
  if menuKind=='main' then
-  local pw=290;local px=math.max(12,math.min(W-pw-12,menuX));local py=math.max(80,math.min(H-365,menuY))
-  box(px,py,pw,306,'20160F','08');text(px+18,py+25,'Menu do player',19,4)
-  local choices={{'Play / pause',function()menuKind=nil;mp.commandv('cycle','pause')end},{isLite and 'Configurações…' or 'Atalhos de teclado…',function()menuKind=nil;host(isLite and 'settings' or 'shortcuts')end},{(isLite and 'Fechar vídeo' or 'Voltar à biblioteca'),function()menuKind=nil;host('library')end},{'Ajustes de imagem',function()menuKind='image';menuX=28;menuY=H-390 end},{'Áudio',function()openTracks('audio')end},{'Legendas',function()openTracks('sub')end},{'Tela cheia / restaurar',function()menuKind=nil;host('fullscreen')end},{'Salvar imagem do vídeo',function()menuKind=nil;host('screenshot')end}}
+  local pw=290;local px=math.max(12,math.min(W-pw-12,menuX));local py=math.max(80,math.min(H-424,menuY))
+  box(px,py,pw,334,'20160F','08');text(px+18,py+25,'Menu do player',19,4)
+  local choices={{'Play / pause',function()menuKind=nil;mp.commandv('cycle','pause')end},{'Atalhos de teclado…',function()menuKind=nil;host('shortcuts')end},{(isLite and 'Fechar vídeo' or 'Voltar à biblioteca'),function()menuKind=nil;host('library')end},{'Ajustes de imagem',function()menuKind='image';menuX=28;menuY=H-390 end},{'Áudio',function()openTracks('audio')end},{'Legendas',function()openTracks('sub')end},{'Tela cheia / restaurar',function()menuKind=nil;host('fullscreen')end},{'Salvar imagem do vídeo',function()menuKind=nil;host('screenshot')end},{'Configurações',function()menuKind=nil;draw();host('settings')end}}
   for i,item in ipairs(choices)do local y=py+46+(i-1)*28;local level=zone(px+12,y,pw-24,28,item[2],item[1]);text(px+20,y+14,item[1],15+level,4,level>0.08 and accent or 'FFFFFF')end
  end
 

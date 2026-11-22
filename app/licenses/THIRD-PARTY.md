@@ -15,5 +15,4 @@ As imagens, fotografias, logotipos e dados de filmes/séries obtidos de TMDB e O
 * **mpv para Thumbfast**: Windows x64 de 2026-11-01, commit `48fca90e8c`, GPL. Fonte: https://github.com/mpv-player/mpv/tree/48fca90e8c. Receitas: https://github.com/shinchiro/mpv-winbuild-cmake. Pacote e SHA-256 em `dependencies.lock.json` e identificação do executável em `fua-native/thumbnail-runtime-source.json`.
 
 * **NAudio 1.10.0**: MIT; texto em NAudio-MIT.txt. Fonte: https://github.com/naudio/NAudio/tree/v1.10.0.
-* **Vosk 0.3.45** e **vosk-model-small-pt-0.3**: Apache-2.0; texto em Vosk-Apache-2.0.txt. Fonte: https://github.com/alphacep/vosk-api/tree/v0.3.45 e https://alphacephei.com/vosk/models. Runtime GCC incluído pelo pacote Windows, com GPL e exceção de runtime em GCC-Runtime-Exception.txt. Arquivos e hashes em dependencies.lock.json.
 * **flag-icons**: MIT; licença em Flag-icons-MIT.txt. Fonte: https://github.com/lipis/flag-icons.

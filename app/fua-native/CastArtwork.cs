@@ -11,7 +11,6 @@ using System.Diagnostics;
 using System.Net;
 using System.Threading.Tasks;
 class CastArtwork {
- class Client:WebClient {protected override WebRequest GetWebRequest(Uri uri){var r=base.GetWebRequest(uri);r.Timeout=6000;return r;}}
  static int Main(string[] args){try{
   if(args.Length==0)return 1;
   string app=Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,".."));
@@ -21,13 +20,17 @@ class CastArtwork {
   var people=new List<Dictionary<string,object>>();
   if(data.TryGetValue("cast",out value))foreach(object item in (IEnumerable)value){var person=item as Dictionary<string,object>;if(person!=null)people.Add(person);}
   string dir=Environment.GetEnvironmentVariable("FUA_DATA_DIR");if(String.IsNullOrEmpty(dir))dir=Path.Combine(app,"data");dir=Path.Combine(dir,"cast-photo-cache");Directory.CreateDirectory(dir);
-  ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;
-  Parallel.ForEach(people,new ParallelOptions{MaxDegreeOfParallelism=4},person=>{try{
+
+  Parallel.ForEach(people,new ParallelOptions{MaxDegreeOfParallelism=4},person=>{string sourceFile=null;try{
    long id;if(!person.ContainsKey("id")||!long.TryParse(Convert.ToString(person["id"]),out id)||id<=0)return;
    string file=Path.Combine(dir,id+"-144.bgra");
+   if(File.Exists(file)&&new FileInfo(file).Length!=144*144*4)File.Delete(file);
    if(!File.Exists(file)){
-    Uri uri;if(!person.ContainsKey("photo")||!Uri.TryCreate(Convert.ToString(person["photo"]),UriKind.Absolute,out uri)||uri.Scheme!="https"||uri.Host!="image.tmdb.org")return;
-    byte[] imageBytes;using(var client=new Client())imageBytes=client.DownloadData(uri);
+    object source;string sourceRoot=Path.GetFullPath(Path.Combine(Path.GetDirectoryName(dir),"cast-photo-source-cache"))+Path.DirectorySeparatorChar;
+    if(!person.TryGetValue("image",out source)||source==null)return;
+    string imageFile=Path.GetFullPath(Convert.ToString(source));
+    if(!imageFile.StartsWith(sourceRoot,StringComparison.OrdinalIgnoreCase)||!File.Exists(imageFile))return;
+    sourceFile=imageFile;byte[] imageBytes=File.ReadAllBytes(imageFile);
     using(var stream=new MemoryStream(imageBytes))using(var image=new Bitmap(stream))using(var b=new Bitmap(144,144,PixelFormat.Format32bppArgb)){
      using(var g=Graphics.FromImage(b))using(var clip=new GraphicsPath()){
       g.SmoothingMode=SmoothingMode.AntiAlias;g.InterpolationMode=InterpolationMode.HighQualityBicubic;clip.AddEllipse(1,1,142,142);g.SetClip(clip);
@@ -39,7 +42,7 @@ class CastArtwork {
     }
    }
    person["file"]=file;
-  }catch{}});
-  Console.Write(j.Serialize(new{cast=people}));return 0;
+  }catch(Exception error){if(sourceFile!=null&&(error is ArgumentException||error is OutOfMemoryException)){try{File.Delete(sourceFile);}catch{}}if(Environment.GetEnvironmentVariable("FUA_CAST_DEBUG")=="1")Console.Error.WriteLine(Convert.ToString(person["id"])+": "+error.GetType().Name+": "+error.Message);}});
+  data["cast"]=people;Console.Write(j.Serialize(data));return 0;
  }catch{return 1;}}
 }

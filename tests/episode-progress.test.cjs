@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const source=fs.readFileSync('app/library.js','utf8');
 function el(tag,cls,text){return {tag,className:cls,text,children:[],append(...n){this.children.push(...n)},replaceChildren(){this.children=[]},setAttribute(){}}}
 let plays=0;
-const context={g:{key:'test',type:'tv',items:[{id:'episode',episode:1,season:0,name:'special.mkv',position:1000}]},season:0,list:el('div'),el,button:(text,cls,fn)=>Object.assign(el('button',cls,text),{onclick:fn}),play:async()=>{plays++},episodeAction:i=>'Continue '+i.position,label:i=>'Resume '+i.position,bundledDetails:{files:{}},refreshOpenEpisodes:null};
+const context={paintSeasonCast:()=>{},seasonCasts:new Map(),g:{key:'test',type:'tv',items:[{id:'episode',episode:1,season:0,name:'special.mkv',position:1000}]},season:0,list:el('div'),el,button:(text,cls,fn)=>Object.assign(el('button',cls,text),{onclick:fn}),play:async()=>{plays++},episodeAction:i=>'Continue '+i.position,label:i=>'Resume '+i.position,bundledDetails:{files:{}},refreshOpenEpisodes:null};
 vm.createContext(context);
 const start=source.indexOf('const seasonInfo=new Map();'),end=source.indexOf(';d.hidden=false;',start);
 vm.runInContext(source.slice(start,end)+';episodes(false)',context);

@@ -33,7 +33,7 @@ partial class FuaNative {
   protected override void OnPaint(PaintEventArgs e){base.OnPaint(e);e.Graphics.InterpolationMode=System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;e.Graphics.DrawImage(logo,LogoBounds());}
   protected override void Dispose(bool disposing){if(disposing)logo.Dispose();base.Dispose(disposing);}
  }
- void AutoStartVoice(){} void StopVoice(){} void PlayLibraryEpisode(string id){}
+ void PlayLibraryEpisode(string id){}
  void PickLiteFile(){using(var dialog=new OpenFileDialog()){dialog.Filter="Vídeos|*.mkv;*.mp4;*.avi;*.webm;*.mov;*.m4v;*.ts;*.m2ts;*.wmv|Todos os arquivos|*.*";if(dialog.ShowDialog(this)==DialogResult.OK)Open(dialog.FileName,0);}}
  void ShowLiteStart(){
   if(full)ToggleFull();FormBorderStyle=FormBorderStyle.None;MinimumSize=new Size(600,360);SetVideoWindowSize(1280,720);
@@ -54,8 +54,14 @@ partial class FuaNative {
   using(var form=new Form{Text=AppTitle+" · Configurações",StartPosition=FormStartPosition.CenterParent,Size=new Size(740,590),MinimumSize=new Size(600,470),BackColor=Color.FromArgb(12,18,27),ForeColor=Color.White,Font=new Font("Segoe UI",10),MinimizeBox=false,MaximizeBox=false}){
    var tabs=new TabControl{Dock=DockStyle.Fill};form.Controls.Add(tabs);var buttons=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,FlowDirection=FlowDirection.RightToLeft};form.Controls.Add(buttons);buttons.BringToFront();
    var video=new TabPage("Vídeo"){BackColor=form.BackColor,ForeColor=Color.White};tabs.TabPages.Add(video);
-   var modes=new ComboBox{Dock=DockStyle.Top,DropDownStyle=ComboBoxStyle.DropDownList};modes.Items.AddRange(new object[]{"HDR automático","HDR direto","HDR processado"});modes.SelectedIndex=hdrOutputMode=="direct"?1:hdrOutputMode=="processed"?2:0;
-   var editor=new TextBox{Dock=DockStyle.Fill,Multiline=true,ScrollBars=ScrollBars.Both,WordWrap=false,Font=new Font("Consolas",10),Text=File.Exists(DataFile("video-engine.conf"))?File.ReadAllText(DataFile("video-engine.conf")):DefaultVideoConfig};video.Controls.Add(editor);video.Controls.Add(modes);
+   var modes=new ComboBox{Dock=DockStyle.Top,DropDownStyle=ComboBoxStyle.DropDownList};modes.Items.AddRange(new object[]{"Automático · HDR direto quando disponível","HDR direto · processamento pela TV","HDR processado pelo Player"});modes.SelectedIndex=hdrOutputMode=="direct"?1:hdrOutputMode=="processed"?2:0;
+   var editor=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,WordWrap=true,BackColor=Color.FromArgb(26,42,58),ForeColor=Color.FromArgb(207,225,240),Font=new Font("Consolas",10),Text=File.Exists(DataFile("video-engine.conf"))?File.ReadAllText(DataFile("video-engine.conf")):DefaultVideoConfig};editor.Text=editor.Text.Replace("# Configurações avançadas do Fua Player. Uma opção por linha.","# Advanced Player configuration. One option per line.");
+   var videoActions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=46};
+   var edit=new SettingsButton{Text="Editar",Width=100,Height=34,BackColor=Color.FromArgb(26,42,58),ForeColor=Color.White};edit.Click+=(s,e)=>{editor.ReadOnly=false;editor.Focus();};videoActions.Controls.Add(edit);
+   var defaults=new SettingsButton{Text="Restaurar padrão",Width=150,Height=34,BackColor=edit.BackColor,ForeColor=Color.White};defaults.Click+=(s,e)=>{editor.Text=DefaultVideoConfig;editor.ReadOnly=false;editor.Focus();};videoActions.Controls.Add(defaults);
+   var apply=new SettingsButton{Text="OK",Width=70,Height=34,BackColor=edit.BackColor,ForeColor=Color.White};apply.Click+=(s,e)=>{try{ParseVideoConfig(editor.Text);editor.ReadOnly=true;}catch(Exception error){MessageBox.Show(form,error.Message,"Revise a configuração");}};videoActions.Controls.Add(apply);
+   var help=new Label{Dock=DockStyle.Top,Height=55,Text="Edite opção=valor. Salve e reabra o Player para aplicar. Linhas com # são comentários.",Padding=new Padding(0,8,0,0)};
+   video.Controls.Add(editor);video.Controls.Add(videoActions);video.Controls.Add(help);video.Controls.Add(modes);
    var subtitle=new TabPage("Legendas"){BackColor=form.BackColor,ForeColor=Color.White};tabs.TabPages.Add(subtitle);var table=new TableLayoutPanel{Dock=DockStyle.Top,ColumnCount=2,AutoSize=true,Padding=new Padding(16)};table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,55));table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,45));subtitle.Controls.Add(table);
    var values=SubtitleSettings();var font=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=210};foreach(var family in FontFamily.Families)font.Items.Add(family.Name);font.SelectedItem=values.ContainsKey("sub-font")?Convert.ToString(values["sub-font"]):"Segoe UI";if(font.SelectedIndex<0)font.SelectedItem="Arial";
    var size=new NumericUpDown{Minimum=10,Maximum=100,Value=values.ContainsKey("sub-font-size")?Math.Max(10,Math.Min(100,Convert.ToDecimal(values["sub-font-size"]))):36};
