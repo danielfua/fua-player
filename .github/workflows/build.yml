@@ -47,6 +47,8 @@ jobs:
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           ./app/node.exe ./tests/player-navigation.test.cjs
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          ./app/node.exe ./tests/title-artwork.test.cjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           ./app/node.exe ./tests/lite-ui.test.cjs
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
       - name: Build Lite portable

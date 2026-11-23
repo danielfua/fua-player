@@ -1,4 +1,4 @@
-# Fua Player 2.3.1
+# Fua Player 2.3.2
 
 Versão portátil para Windows x64.
 
